@@ -5,5 +5,18 @@ idf_component_register(
         "role_display.c"
         "current_sensor.c"
         "espnow_comm.c"
+        "ch1115.c"
+        "display_ui.c"
+        "battery_monitor.c"
+        "mode_button.c"
     INCLUDE_DIRS "."
+    REQUIRES
+        esp_adc
+        esp_wifi
+        esp_event
+        esp_netif
+        nvs_flash
+        esp_driver_i2c
+        esp_driver_gpio
+        esp_timer
 )

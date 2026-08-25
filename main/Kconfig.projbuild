@@ -1,4 +1,5 @@
 menu "Current Monitor Configuration"
+
     choice DEVICE_ROLE
         prompt "Device role"
         default DEVICE_ROLE_SENSOR
@@ -8,5 +9,7 @@ menu "Current Monitor Configuration"
 
         config DEVICE_ROLE_DISPLAY
             bool "Device B - Display"
+
     endchoice
+
 endmenu

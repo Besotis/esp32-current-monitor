@@ -1,0 +1,25 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "sensor",
+            "displayName": "Device A - SCT-013 Sensor",
+            "binaryDir": "build/sensor",
+            "cacheVariables": {
+                "IDF_TARGET": "esp32s3",
+                "SDKCONFIG": "./build/sensor/sdkconfig",
+                "SDKCONFIG_DEFAULTS": "sdkconfig.defaults;sdkconfig.sensor"
+            }
+        },
+        {
+            "name": "display",
+            "displayName": "Device B - Display",
+            "binaryDir": "build/display",
+            "cacheVariables": {
+                "IDF_TARGET": "esp32s3",
+                "SDKCONFIG": "./build/display/sdkconfig",
+                "SDKCONFIG_DEFAULTS": "sdkconfig.defaults;sdkconfig.display"
+            }
+        }
+    ]
+}

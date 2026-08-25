@@ -1,0 +1,9 @@
+build/
+build*/
+sdkconfig
+sdkconfig.old
+.vscode/
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc

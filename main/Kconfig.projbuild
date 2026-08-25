@@ -1,0 +1,12 @@
+menu "Current Monitor Configuration"
+    choice DEVICE_ROLE
+        prompt "Device role"
+        default DEVICE_ROLE_SENSOR
+
+        config DEVICE_ROLE_SENSOR
+            bool "Device A - SCT-013 current sensor"
+
+        config DEVICE_ROLE_DISPLAY
+            bool "Device B - Display"
+    endchoice
+endmenu

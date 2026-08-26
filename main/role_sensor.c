@@ -19,32 +19,17 @@ static const char *TAG = "ROLE_SENSOR";
 void role_sensor_start(void)
 {
     ESP_LOGI(TAG, "=================================");
-    ESP_LOGI(TAG, "Device role: A - CURRENT SENSOR");
+    ESP_LOGI(TAG, "Device role: A - 3-PHASE SENSOR");
     ESP_LOGI(TAG, "=================================");
 
     ESP_ERROR_CHECK(current_sensor_init());
     ESP_ERROR_CHECK(espnow_comm_init());
     ESP_ERROR_CHECK(espnow_add_peer(DEVICE_B_MAC));
 
-    const uint32_t session_id = esp_random();
+    const uint32_t session_id =
+        esp_random();
+
     uint32_t sequence = 0;
-
-    ESP_LOGI(
-        TAG,
-        "Unicast target B: %02X:%02X:%02X:%02X:%02X:%02X",
-        DEVICE_B_MAC[0],
-        DEVICE_B_MAC[1],
-        DEVICE_B_MAC[2],
-        DEVICE_B_MAC[3],
-        DEVICE_B_MAC[4],
-        DEVICE_B_MAC[5]
-    );
-
-    ESP_LOGI(
-        TAG,
-        "Session ID: 0x%08" PRIX32,
-        session_id
-    );
 
     while (1) {
         current_measurement_t measurement;
@@ -59,7 +44,10 @@ void role_sensor_start(void)
                 esp_err_to_name(err)
             );
 
-            vTaskDelay(pdMS_TO_TICKS(500));
+            vTaskDelay(
+                pdMS_TO_TICKS(500)
+            );
+
             continue;
         }
 
@@ -67,13 +55,36 @@ void role_sensor_start(void)
             .magic = CURRENT_PROTOCOL_MAGIC,
             .version = CURRENT_PROTOCOL_VERSION,
             .reserved = {0, 0, 0},
+
             .session_id = session_id,
             .sequence = sequence++,
-            .current_rms_a = measurement.current_rms_a,
-            .sensor_voltage_rms_v =
-                measurement.sensor_voltage_rms_v,
-            .offset_voltage_v =
-                measurement.offset_voltage_v,
+
+            .current_l1_a =
+                measurement.l1.current_rms_a,
+
+            .current_l2_a =
+                measurement.l2.current_rms_a,
+
+            .current_l3_a =
+                measurement.l3.current_rms_a,
+
+            .sensor_l1_voltage_rms_v =
+                measurement.l1.sensor_voltage_rms_v,
+
+            .sensor_l2_voltage_rms_v =
+                measurement.l2.sensor_voltage_rms_v,
+
+            .sensor_l3_voltage_rms_v =
+                measurement.l3.sensor_voltage_rms_v,
+
+            .offset_l1_voltage_v =
+                measurement.l1.offset_voltage_v,
+
+            .offset_l2_voltage_v =
+                measurement.l2.offset_voltage_v,
+
+            .offset_l3_voltage_v =
+                measurement.l3.offset_voltage_v,
         };
 
         err = espnow_send_current_to(
@@ -92,20 +103,39 @@ void role_sensor_start(void)
         ESP_LOGI(
             TAG,
             "TX #%" PRIu32
-            " | Current=%.3f A"
-            " | Sensor=%.4f V RMS"
-            " | Offset=%.3f V"
-            " | raw=%d..%d"
-            " | samples=%d",
+            " | L1=%.3f A | L2=%.3f A | L3=%.3f A",
             packet.sequence,
-            measurement.current_rms_a,
-            measurement.sensor_voltage_rms_v,
-            measurement.offset_voltage_v,
-            measurement.raw_min,
-            measurement.raw_max,
-            measurement.sample_count
+            packet.current_l1_a,
+            packet.current_l2_a,
+            packet.current_l3_a
         );
 
-        vTaskDelay(pdMS_TO_TICKS(150));
+        ESP_LOGD(
+            TAG,
+            "L1 %.4fVrms %.3fV raw=%d..%d n=%d"
+            " | L2 %.4fVrms %.3fV raw=%d..%d n=%d"
+            " | L3 %.4fVrms %.3fV raw=%d..%d n=%d",
+            measurement.l1.sensor_voltage_rms_v,
+            measurement.l1.offset_voltage_v,
+            measurement.l1.raw_min,
+            measurement.l1.raw_max,
+            measurement.l1.sample_count,
+
+            measurement.l2.sensor_voltage_rms_v,
+            measurement.l2.offset_voltage_v,
+            measurement.l2.raw_min,
+            measurement.l2.raw_max,
+            measurement.l2.sample_count,
+
+            measurement.l3.sensor_voltage_rms_v,
+            measurement.l3.offset_voltage_v,
+            measurement.l3.raw_min,
+            measurement.l3.raw_max,
+            measurement.l3.sample_count
+        );
+
+        vTaskDelay(
+            pdMS_TO_TICKS(150)
+        );
     }
 }

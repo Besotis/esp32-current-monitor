@@ -5,6 +5,7 @@
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "esp_log.h"
+#include "esp_check.h"
 
 static const char *TAG="BATTERY";
 static adc_oneshot_unit_handle_t adc;
@@ -21,14 +22,19 @@ static int percent_from_v(float v)
 
     static const point_t t[] =
     {
+        /*
+         * Praktinė 1S LiPo indikacijos kreivė.
+         * Pakoreguota pagal realų matavimą, kad apie 4.04 V
+         * vartotojo ekrane būtų rodoma maždaug 84 %.
+         */
         {4.20f, 100},
-        {4.10f,  90},
-        {4.00f,  80},
-        {3.90f,  70},
-        {3.80f,  55},
-        {3.70f,  40},
-        {3.60f,  25},
-        {3.50f,  15},
+        {4.10f,  93},
+        {4.00f,  84},
+        {3.90f,  73},
+        {3.80f,  58},
+        {3.70f,  42},
+        {3.60f,  27},
+        {3.50f,  16},
         {3.40f,   8},
         {3.30f,   3},
         {3.20f,   0},
@@ -69,9 +75,65 @@ esp_err_t battery_monitor_init(void){
     return ESP_OK;
 }
 
-esp_err_t battery_monitor_read(float *voltage_v,int *percent){
-    if(!voltage_v||!percent)return ESP_ERR_INVALID_ARG;
-    int64_t sum=0; const int n=32;
-    for(int i=0;i<n;i++){int raw=0,mv=0;ESP_ERROR_CHECK(adc_oneshot_read(adc,BATTERY_ADC_CHANNEL,&raw));if(cali_ok)ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali,raw,&mv));else mv=(raw*3300)/4095;sum+=mv;}
-    float v=((float)sum/n)/1000.0f*BATTERY_DIVIDER_RATIO;*voltage_v=v;*percent=percent_from_v(v);return ESP_OK;
+esp_err_t battery_monitor_read(float *voltage_v, int *percent)
+{
+    if (voltage_v == NULL || percent == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    int64_t sum_mv = 0;
+    const int sample_count = 32;
+
+    for (int i = 0; i < sample_count; i++) {
+        int raw = 0;
+        int mv = 0;
+
+        ESP_RETURN_ON_ERROR(
+            adc_oneshot_read(
+                adc,
+                BATTERY_ADC_CHANNEL,
+                &raw
+            ),
+            TAG,
+            "Battery ADC read failed"
+        );
+
+        if (cali_ok) {
+            ESP_RETURN_ON_ERROR(
+                adc_cali_raw_to_voltage(
+                    cali,
+                    raw,
+                    &mv
+                ),
+                TAG,
+                "Battery ADC calibration failed"
+            );
+        } else {
+            mv = (raw * 3300) / 4095;
+        }
+
+        sum_mv += mv;
+    }
+
+    float adc_voltage_v =
+        ((float)sum_mv / (float)sample_count) /
+        1000.0f;
+
+    float battery_voltage_v =
+        adc_voltage_v *
+        BATTERY_DIVIDER_RATIO;
+
+    *voltage_v = battery_voltage_v;
+    *percent = percent_from_v(battery_voltage_v);
+
+    ESP_LOGI(
+        TAG,
+        "BAT ADC=%.3f V | Battery=%.3f V | %d%% | divider=%.3f",
+        adc_voltage_v,
+        battery_voltage_v,
+        *percent,
+        BATTERY_DIVIDER_RATIO
+    );
+
+    return ESP_OK;
 }

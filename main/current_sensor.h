@@ -11,6 +11,13 @@ typedef struct
     int raw_min;
     int raw_max;
     int sample_count;
+} current_phase_measurement_t;
+
+typedef struct
+{
+    current_phase_measurement_t l1;
+    current_phase_measurement_t l2;
+    current_phase_measurement_t l3;
 } current_measurement_t;
 
 esp_err_t current_sensor_init(void);

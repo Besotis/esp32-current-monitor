@@ -196,12 +196,12 @@ static void draw_status_bar(
          * rodome tikrą ESP-NOW priimto paketo RSSI dBm.
          */
         draw_signal_icon(
-            47,
+            37,
             0
         );
 
         ch1115_draw_text(
-            56,
+            46,
             0,
             signal_text,
             1
@@ -212,12 +212,12 @@ static void draw_status_bar(
          * o signalo procentą pakeičia "- -".
          */
         draw_signal_icon(
-            47,
+            37,
             0
         );
 
         ch1115_draw_text(
-            56,
+            46,
             0,
             "...",
             1

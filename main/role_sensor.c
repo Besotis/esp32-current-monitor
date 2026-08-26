@@ -103,11 +103,25 @@ void role_sensor_start(void)
         ESP_LOGI(
             TAG,
             "TX #%" PRIu32
-            " | L1=%.3f A | L2=%.3f A | L3=%.3f A",
+            " | L1=%.4fA %.5fVrms off=%.3fV raw=%d..%d"
+            " | L2=%.4fA %.5fVrms off=%.3fV raw=%d..%d"
+            " | L3=%.4fA %.5fVrms off=%.3fV raw=%d..%d",
             packet.sequence,
             packet.current_l1_a,
+            packet.sensor_l1_voltage_rms_v,
+            packet.offset_l1_voltage_v,
+            measurement.l1.raw_min,
+            measurement.l1.raw_max,
             packet.current_l2_a,
-            packet.current_l3_a
+            packet.sensor_l2_voltage_rms_v,
+            packet.offset_l2_voltage_v,
+            measurement.l2.raw_min,
+            measurement.l2.raw_max,
+            packet.current_l3_a,
+            packet.sensor_l3_voltage_rms_v,
+            packet.offset_l3_voltage_v,
+            measurement.l3.raw_min,
+            measurement.l3.raw_max
         );
 
         ESP_LOGD(

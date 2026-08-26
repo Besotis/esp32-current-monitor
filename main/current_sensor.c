@@ -26,6 +26,7 @@ typedef struct
     adc_channel_t channel;
     int gpio;
     float calibration_factor;
+    float noise_rms_v;
 
     adc_cali_handle_t cali_handle;
     bool cali_enabled;
@@ -52,18 +53,21 @@ static phase_cfg_t s_phase[PHASE_COUNT] = {
         .channel = SCT_L1_ADC_CHANNEL,
         .gpio = PIN_SCT_L1_ADC,
         .calibration_factor = SCT_L1_CALIBRATION_FACTOR,
+        .noise_rms_v = SCT_L1_NOISE_RMS_V,
     },
     {
         .enabled = SCT_L2_ENABLED,
         .channel = SCT_L2_ADC_CHANNEL,
         .gpio = PIN_SCT_L2_ADC,
         .calibration_factor = SCT_L2_CALIBRATION_FACTOR,
+        .noise_rms_v = SCT_L2_NOISE_RMS_V,
     },
     {
         .enabled = SCT_L3_ENABLED,
         .channel = SCT_L3_ADC_CHANNEL,
         .gpio = PIN_SCT_L3_ADC,
         .calibration_factor = SCT_L3_CALIBRATION_FACTOR,
+        .noise_rms_v = SCT_L3_NOISE_RMS_V,
     },
 };
 
@@ -306,12 +310,15 @@ static void finalize_phase(
 
     float corrected_voltage_rms_v = 0.0f;
 
-    if (sensor_voltage_rms_v > SCT_NOISE_RMS_V) {
+    const float noise_rms_v =
+        s_phase[phase_index].noise_rms_v;
+
+    if (sensor_voltage_rms_v > noise_rms_v) {
         float corrected_sq =
             sensor_voltage_rms_v *
             sensor_voltage_rms_v -
-            SCT_NOISE_RMS_V *
-            SCT_NOISE_RMS_V;
+            noise_rms_v *
+            noise_rms_v;
 
         if (corrected_sq > 0.0f) {
             corrected_voltage_rms_v =

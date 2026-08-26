@@ -19,13 +19,13 @@
 #define SCT_L2_ENABLED                 1
 #define SCT_L3_ENABLED                 1
 
-#define PIN_SCT_L1_ADC                 1
-#define PIN_SCT_L2_ADC                 2
-#define PIN_SCT_L3_ADC                 3
+#define PIN_SCT_L1_ADC                 3 //GPIO3
+#define PIN_SCT_L2_ADC                 4 //GPIO4
+#define PIN_SCT_L3_ADC                 7 //GPIO7
 
-#define SCT_L1_ADC_CHANNEL             ADC_CHANNEL_0
-#define SCT_L2_ADC_CHANNEL             ADC_CHANNEL_1
-#define SCT_L3_ADC_CHANNEL             ADC_CHANNEL_2
+#define SCT_L1_ADC_CHANNEL             ADC_CHANNEL_2
+#define SCT_L2_ADC_CHANNEL             ADC_CHANNEL_3
+#define SCT_L3_ADC_CHANNEL             ADC_CHANNEL_6
 
 /* B / DISPLAY */
 #define PIN_BATTERY_ADC                2
@@ -49,12 +49,14 @@
  * variante kiekvieną SCT bus galima sukalibruoti atskirai.
  */
 #define SCT_CURRENT_PER_VOLT_A         30.0f
-#define SCT_L1_CALIBRATION_FACTOR      0.900f
-#define SCT_L2_CALIBRATION_FACTOR      0.900f
-#define SCT_L3_CALIBRATION_FACTOR      0.900f
+#define SCT_L1_CALIBRATION_FACTOR      0.990f
+#define SCT_L2_CALIBRATION_FACTOR      0.990f
+#define SCT_L3_CALIBRATION_FACTOR      0.990f
 
-#define SCT_NOISE_RMS_V                0.0045f
-#define SCT_ZERO_DEADBAND_A            0.05f
+#define SCT_L1_NOISE_RMS_V             0.00403f
+#define SCT_L2_NOISE_RMS_V             0.00413f
+#define SCT_L3_NOISE_RMS_V             0.00418f
+#define SCT_ZERO_DEADBAND_A            0.06f
 
 #define NOMINAL_PHASE_VOLTAGE_V        230.0f
 

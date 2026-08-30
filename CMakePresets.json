@@ -8,7 +8,8 @@
       "cacheVariables": {
         "IDF_TARGET": "esp32s3",
         "SDKCONFIG": "./build/sensor/sdkconfig",
-        "SDKCONFIG_DEFAULTS": "sdkconfig.defaults;sdkconfig.sensor"
+        "SDKCONFIG_DEFAULTS": "sdkconfig.defaults;sdkconfig.sensor",
+        "DEVICE_BUILD_ROLE": "sensor"
       }
     },
     {
@@ -18,7 +19,8 @@
       "cacheVariables": {
         "IDF_TARGET": "esp32s3",
         "SDKCONFIG": "./build/display/sdkconfig",
-        "SDKCONFIG_DEFAULTS": "sdkconfig.defaults;sdkconfig.display"
+        "SDKCONFIG_DEFAULTS": "sdkconfig.defaults;sdkconfig.display",
+        "DEVICE_BUILD_ROLE": "display"
       }
     }
   ]

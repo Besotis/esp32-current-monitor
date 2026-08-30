@@ -1,0 +1,28 @@
+idf_component_register(
+    SRCS
+        "role_display.c"
+        "battery_monitor.c"
+        "mode_button.c"
+        "display_st7789.c"
+        "display_ui.c"
+        "ui/ui.c"
+        "ui/ui_helpers.c"
+        "ui/components/ui_comp_hook.c"
+        "ui/screens/ui_Screen1.c"
+    INCLUDE_DIRS
+        "."
+        "ui"
+        "ui/screens"
+        "ui/components"
+    REQUIRES
+        current_common
+        esp_adc
+        esp_timer
+        esp_lcd
+        esp_lvgl_port
+        lvgl
+    PRIV_REQUIRES
+        esp_driver_gpio
+        esp_driver_spi
+        esp_driver_ledc
+)

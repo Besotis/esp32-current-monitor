@@ -1,0 +1,10 @@
+idf_component_register(
+    SRCS
+        "role_sensor.c"
+        "current_sensor.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        current_common
+        esp_adc
+)

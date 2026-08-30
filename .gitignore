@@ -7,3 +7,6 @@ sdkconfig.old
 Thumbs.db
 __pycache__/
 *.pyc
+
+/managed_components/
+/build/

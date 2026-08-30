@@ -5,6 +5,7 @@
 #include "battery_monitor.h"
 #include "board_config.h"
 #include "display_ui.h"
+#include "display_st7789.h"
 #include "espnow_comm.h"
 #include "mode_button.h"
 #include "protocol.h"
@@ -54,6 +55,8 @@ static int sig(int8_t r)
 static void on_packet(const current_data_packet_t *p,const uint8_t mac[6],int8_t rssi){if(!q||!p||!mac||!same(mac,DEVICE_A_MAC))return;rx_t x={.packet=*p,.rssi=rssi};memcpy(x.mac,mac,6);xQueueOverwrite(q,&x);}
 
 void role_display_start(void){
+ /* Hide TFT immediately, before Wi-Fi/ESP-NOW init, to suppress boot artifacts. */
+ ESP_ERROR_CHECK(display_st7789_early_backlight_off());
  ESP_LOGI(TAG,"Device role: B - DISPLAY");
  q=xQueueCreate(1,sizeof(rx_t));if(!q){ESP_LOGE(TAG,"Queue failed");return;}
  ESP_ERROR_CHECK(espnow_comm_init());ESP_ERROR_CHECK(battery_monitor_init());ESP_ERROR_CHECK(mode_button_init());ESP_ERROR_CHECK(display_ui_init());espnow_comm_set_receive_callback(on_packet);

@@ -1,371 +1,189 @@
 #include "display_ui.h"
+
 #include "board_config.h"
-#include "ch1115.h"
+#include "display_st7789.h"
+#include "esp_check.h"
+#include "esp_lvgl_port.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "ui/ui.h"
 
 #include <stdio.h>
-#include <stddef.h>
 
-static void format_uptime(
-    unsigned seconds,
-    char *out,
-    size_t out_size
-)
-{
-    if (seconds < 60u) {
-        snprintf(
-            out,
-            out_size,
-            "%u",
-            seconds
-        );
-        return;
-    }
-
-    if (seconds < 3600u) {
-        unsigned minutes = seconds / 60u;
-        unsigned secs = seconds % 60u;
-
-        snprintf(
-            out,
-            out_size,
-            "%u:%02u",
-            minutes,
-            secs
-        );
-        return;
-    }
-
-    unsigned hours = seconds / 3600u;
-    unsigned minutes = (seconds / 60u) % 60u;
-    unsigned secs = seconds % 60u;
-
-    snprintf(
-        out,
-        out_size,
-        "%u:%02u:%02u",
-        hours,
-        minutes,
-        secs
-    );
-}
+static const char *TAG = "DISPLAY_UI";
 
 static float kva(float current_a)
 {
-    return
-        NOMINAL_PHASE_VOLTAGE_V *
-        current_a /
-        1000.0f;
+    return NOMINAL_PHASE_VOLTAGE_V * current_a / 1000.0f;
 }
 
-/*
- * Mini antenos ikona 8x7 px.
- * Piešiama viršutinėje statuso juostoje.
- */
-static void draw_signal_icon(
-    int x,
-    int y
-)
+static void format_uptime(unsigned seconds, char *out, size_t out_size)
 {
-    /*
-     * 4 vertikalios juostos kaip klasikinė signal strength ikona.
-     * Plotis ~9 px, aukštis 7 px.
-     */
-    const int heights[4] = {2, 4, 6, 7};
-
-    for (int bar = 0; bar < 4; ++bar) {
-        int bx = x + bar * 2;
-
-        for (int py = 0; py < heights[bar]; ++py) {
-            ch1115_draw_pixel(
-                bx,
-                y + 6 - py,
-                true
-            );
-        }
-    }
+    const unsigned hours = seconds / 3600u;
+    const unsigned minutes = (seconds / 60u) % 60u;
+    const unsigned secs = seconds % 60u;
+    snprintf(out, out_size, "%02u:%02u:%02u", hours, minutes, secs);
 }
 
-/*
- * Mini baterijos ikona 11x7 px.
- * Vidus užpildomas pagal battery_percent.
- */
-static void draw_battery_icon(
-    int x,
-    int y,
-    int battery_percent
-)
+static lv_color_t battery_color_from_percent(int percent)
 {
-    if (battery_percent < 0) {
-        battery_percent = 0;
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+
+    if (percent >= 50) {
+        /* 50..100%: yellow -> green */
+        const uint8_t t = (uint8_t)(((percent - 50) * 255) / 50);
+        return lv_color_make((uint8_t)(255 - t), 255, 0);
     }
 
-    if (battery_percent > 100) {
-        battery_percent = 100;
-    }
-
-    /* korpusas 9x7 */
-    for (int px = 0; px <= 8; ++px) {
-        ch1115_draw_pixel(x + px, y + 0, true);
-        ch1115_draw_pixel(x + px, y + 6, true);
-    }
-
-    for (int py = 0; py <= 6; ++py) {
-        ch1115_draw_pixel(x + 0, y + py, true);
-        ch1115_draw_pixel(x + 8, y + py, true);
-    }
-
-    /* baterijos kontaktas */
-    ch1115_draw_pixel(x + 9, y + 2, true);
-    ch1115_draw_pixel(x + 10, y + 2, true);
-    ch1115_draw_pixel(x + 9, y + 3, true);
-    ch1115_draw_pixel(x + 10, y + 3, true);
-    ch1115_draw_pixel(x + 9, y + 4, true);
-    ch1115_draw_pixel(x + 10, y + 4, true);
-
-    /*
-     * 7 vidiniai stulpeliai.
-     * 100 % -> visi 7 užpildyti.
-     */
-    int fill =
-        (battery_percent * 7 + 99) / 100;
-
-    for (int px = 0; px < fill; ++px) {
-        for (int py = 2; py <= 4; ++py) {
-            ch1115_draw_pixel(
-                x + 1 + px,
-                y + py,
-                true
-            );
-        }
-    }
+    /* 0..50%: red -> yellow */
+    const uint8_t t = (uint8_t)((percent * 255) / 50);
+    return lv_color_make(255, t, 0);
 }
 
-/*
- * Viršutinė statuso juosta:
- *
- * LAIKAS                    SIGNALAS                  BATERIJA
- * 1:02:33                  [ant] 92%                [bat] 87%
- *
- * Naudojamas tas pats įskaitomas 5x7 fontas.
- */
-static void draw_status_bar(
-    const display_ui_state_t *state
-)
+static void set_hidden(lv_obj_t *obj, bool hidden)
 {
-    char uptime[16];
-    char signal_text[12];
-    char battery_text[8];
-
-    format_uptime(
-        state->uptime_seconds,
-        uptime,
-        sizeof(uptime)
-    );
-
-    snprintf(
-        battery_text,
-        sizeof(battery_text),
-        "%d%%",
-        state->battery_percent
-    );
-
-    /*
-     * Uptime visada prie kairio krašto.
-     */
-    ch1115_draw_text(
-        0,
-        0,
-        uptime,
-        1
-    );
-
-    /*
-     * Signalas maždaug ekrano viduryje.
-     * Kai ryšio nėra, vietoje procento rodoma OFF.
-     */
-    if (state->online) {
-        snprintf(
-            signal_text,
-            sizeof(signal_text),
-            "%d%%",
-            state->signal_percent
-        );
-
-        /*
-         * RSSI test mode:
-         * rodome tikrą ESP-NOW priimto paketo RSSI dBm.
-         */
-        draw_signal_icon(
-            37,
-            0
-        );
-
-        ch1115_draw_text(
-            46,
-            0,
-            signal_text,
-            1
-        );
+    if (hidden) {
+        lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
     } else {
-        /*
-         * Offline: antenos ikona lieka matoma,
-         * o signalo procentą pakeičia "- -".
-         */
-        draw_signal_icon(
-            37,
-            0
-        );
+        lv_obj_remove_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    }
+}
 
-        ch1115_draw_text(
-            46,
-            0,
-            "...",
-            1
-        );
+static void update_signal(const display_ui_state_t *state)
+{
+    set_hidden(ui_SignalLOST, state->online);
+    set_hidden(ui_SignalAntena, !state->online);
+
+    if (!state->online) {
+        return;
     }
 
-    /*
-     * Baterija lygiuojama prie dešinio krašto.
-     * Ikona: x=91..101
-     * Procentas: nuo x=104
-     */
-    draw_battery_icon(
-        91,
-        0,
-        state->battery_percent
-    );
+    int p = state->signal_percent;
+    if (p < 1) p = 1;
+    if (p > 100) p = 100;
 
-    ch1115_draw_text(
-        104,
-        0,
-        battery_text,
-        1
+    /* At least one bar while packets are being received. */
+    set_hidden(ui_Signal20percent, false);
+    set_hidden(ui_Signal40percent, p <= 20);
+    set_hidden(ui_Signal60percent, p <= 40);
+    set_hidden(ui_Signal80percent, p <= 60);
+    set_hidden(ui_Signal100percent, p <= 80);
+}
+
+static void update_battery(int percent)
+{
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+
+    lv_bar_set_value(ui_Bar1, percent, LV_ANIM_ON);
+    lv_obj_set_style_bg_color(
+        ui_Bar1,
+        battery_color_from_percent(percent),
+        LV_PART_INDICATOR | LV_STATE_DEFAULT
     );
+}
+
+static void update_mode(display_mode_t mode)
+{
+    const bool three_phase = (mode == DISPLAY_MODE_GRID);
+
+    set_hidden(ui_ThreePhaseWINDOW, !three_phase);
+    set_hidden(ui_SinglePhaseWINDOW, three_phase);
+
+    /* Exact SquareLine-object behavior requested by the user. */
+    set_hidden(ui_ButtomINFOSinglePhase, !three_phase);
+    set_hidden(ui_BottomINFOFullLoad, three_phase);
+}
+
+static void update_measurements(const display_ui_state_t *state)
+{
+    if (!state->online) {
+        lv_label_set_text(ui_L1AMPS, "L1 : --.-- A");
+        lv_label_set_text(ui_L2AMPS, "L2 : --.-- A");
+        lv_label_set_text(ui_L3AMPS, "L3 : --.-- A");
+        lv_label_set_text(ui_L1KVA, "--.-- KVA");
+        lv_label_set_text(ui_L2KVA, "--.-- KVA");
+        lv_label_set_text(ui_L3KVA, "--.-- KVA");
+        lv_label_set_text(ui_ThreePhasesFullAMPS, "--.-- A");
+        lv_label_set_text(ui_ThreePhasesFullKVA, "--.-- KVA");
+        return;
+    }
+
+    lv_label_set_text_fmt(ui_L1AMPS, "L1 : %.2f A", state->l1_a);
+    lv_label_set_text_fmt(ui_L2AMPS, "L2 : %.2f A", state->l2_a);
+    lv_label_set_text_fmt(ui_L3AMPS, "L3 : %.2f A", state->l3_a);
+
+    lv_label_set_text_fmt(ui_L1KVA, "%.2f KVA", kva(state->l1_a));
+    lv_label_set_text_fmt(ui_L2KVA, "%.2f KVA", kva(state->l2_a));
+    lv_label_set_text_fmt(ui_L3KVA, "%.2f KVA", kva(state->l3_a));
+
+    const float total_a = state->l1_a + state->l2_a + state->l3_a;
+    lv_label_set_text_fmt(ui_ThreePhasesFullAMPS, "%.2f A", total_a);
+    lv_label_set_text_fmt(ui_ThreePhasesFullKVA, "%.2f KVA", kva(total_a));
+}
+
+static void render_locked(const display_ui_state_t *state)
+{
+    char uptime[20];
+    format_uptime(state->uptime_seconds, uptime, sizeof(uptime));
+    lv_label_set_text(ui_UPtime, uptime);
+
+    update_signal(state);
+    update_battery(state->battery_percent);
+    update_mode(state->mode);
+    update_measurements(state);
 }
 
 esp_err_t display_ui_init(void)
 {
-    return ch1115_init();
+    ESP_RETURN_ON_ERROR(display_st7789_init(), TAG, "ST7789 init failed");
+
+    if (!lvgl_port_lock(0)) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    ui_init();
+
+    /* Initial frame: ThreePhase window, offline, battery unknown/0%. */
+    const display_ui_state_t initial = {
+        .mode = DISPLAY_MODE_GRID,
+        .online = false,
+        .uptime_seconds = 0,
+        .battery_percent = 0,
+        .signal_percent = 0,
+        .rssi_dbm = 0,
+        .l1_a = 0.0f,
+        .l2_a = 0.0f,
+        .l3_a = 0.0f,
+    };
+    render_locked(&initial);
+
+    /* Force first complete LVGL frame while the panel/backlight are still hidden. */
+    lv_refr_now(NULL);
+    lvgl_port_unlock();
+
+    vTaskDelay(pdMS_TO_TICKS(DISPLAY_STARTUP_BLANK_MS));
+    ESP_RETURN_ON_ERROR(display_st7789_panel_set_visible(true), TAG, "Panel ON failed");
+    ESP_RETURN_ON_ERROR(
+        display_st7789_backlight_set(DISPLAY_STARTUP_BRIGHTNESS_PCT),
+        TAG,
+        "Backlight ON failed"
+    );
+
+    return ESP_OK;
 }
 
-esp_err_t display_ui_render(
-    const display_ui_state_t *state
-)
+esp_err_t display_ui_render(const display_ui_state_t *state)
 {
     if (state == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    char line[32];
-
-    ch1115_clear();
-
-    draw_status_bar(state);
-
-    if (!state->online) {
-        ch1115_draw_text(
-            28,
-            25,
-            "--- A",
-            2
-        );
-
-        ch1115_draw_text(
-            34,
-            51,
-            "OFFLINE",
-            1
-        );
-
-        return ch1115_flush();
+    if (!lvgl_port_lock(0)) {
+        return ESP_ERR_TIMEOUT;
     }
-
-    if (state->mode == DISPLAY_MODE_GRID) {
-        /*
-         * L1/L2/L3 paliekami 5 px nuo kairio krašto.
-         * Blokas nuleistas žemiau statuso juostos.
-         */
-        snprintf(
-            line,
-            sizeof(line),
-            "L1 %.2fA %.2fkVA",
-            state->l1_a,
-            kva(state->l1_a)
-        );
-
-        ch1115_draw_text(
-            10,
-            21,
-            line,
-            1
-        );
-
-        snprintf(
-            line,
-            sizeof(line),
-            "L2 %.2fA %.2fkVA",
-            state->l2_a,
-            kva(state->l2_a)
-        );
-
-        ch1115_draw_text(
-            10,
-            39,
-            line,
-            1
-        );
-
-        snprintf(
-            line,
-            sizeof(line),
-            "L3 %.2fA %.2fkVA",
-            state->l3_a,
-            kva(state->l3_a)
-        );
-
-        ch1115_draw_text(
-            10,
-            57,
-            line,
-            1
-        );
-    } else {
-        float total_a =
-            state->l1_a +
-            state->l2_a +
-            state->l3_a;
-
-        char current[20];
-        char kva_text[20];
-
-        snprintf(
-            current,
-            sizeof(current),
-            "%.2f A",
-            total_a
-        );
-
-        snprintf(
-            kva_text,
-            sizeof(kva_text),
-            "%.2f kVA",
-            kva(total_a)
-        );
-
-        ch1115_draw_text(
-            20,
-            17,
-            current,
-            2
-        );
-
-        ch1115_draw_text(
-            14,
-            43,
-            kva_text,
-            2
-        );
-    }
-
-    return ch1115_flush();
+    render_locked(state);
+    lvgl_port_unlock();
+    return ESP_OK;
 }

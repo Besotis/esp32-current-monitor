@@ -7,47 +7,65 @@
 /*
  * Seeed Studio XIAO ESP32-S3
  *
- * A / SENSOR:
- *   L1 -> D0 / GPIO1 / ADC1_CH0
- *   L2 -> D1 / GPIO2 / ADC1_CH1
- *   L3 -> D2 / GPIO3 / ADC1_CH2
- *
- * Kol L2/L3 SCT fiziškai neprijungti, paliekame juos išjungtus,
- * kad plaukiojantys ADC įėjimai nerodytų netikrų srovių.
+ * A / SENSOR (final calibrated wiring):
+ *   L1 -> D2 / GPIO3 / ADC1_CH2
+ *   L2 -> D3 / GPIO4 / ADC1_CH3
+ *   L3 -> D8 / GPIO7 / ADC1_CH6
  */
 #define SCT_L1_ENABLED                 1
 #define SCT_L2_ENABLED                 1
 #define SCT_L3_ENABLED                 1
 
-#define PIN_SCT_L1_ADC                 3 //GPIO3
-#define PIN_SCT_L2_ADC                 4 //GPIO4
-#define PIN_SCT_L3_ADC                 7 //GPIO7
+#define PIN_SCT_L1_ADC                 3
+#define PIN_SCT_L2_ADC                 4
+#define PIN_SCT_L3_ADC                 7
 
 #define SCT_L1_ADC_CHANNEL             ADC_CHANNEL_2
 #define SCT_L2_ADC_CHANNEL             ADC_CHANNEL_3
 #define SCT_L3_ADC_CHANNEL             ADC_CHANNEL_6
 
-/* B / DISPLAY */
+/*
+ * B / DISPLAY board
+ *
+ * Existing inputs:
+ *   Battery ADC -> D1 / GPIO2
+ *   Mode button -> D2 / GPIO3, button to GND, internal pull-up
+ *
+ * GMT130-V1.0 / ST7789 240x240 (7-pin):
+ *   VCC      -> XIAO 3V3
+ *   GND      -> XIAO GND
+ *   SCK      -> D5  / GPIO6
+ *   SDA/MOSI -> D4  / GPIO5
+ *   RES/RST  -> D3  / GPIO4
+ *   DC       -> D10 / GPIO9
+ *   BLK      -> D9  / GPIO8
+ *
+ * The module has no exposed CS pin, so the driver uses CS=-1.
+ */
 #define PIN_BATTERY_ADC                2
 #define PIN_MODE_BUTTON                3
-#define PIN_DISPLAY_SDA                5
-#define PIN_DISPLAY_SCL                6
 
-#define DISPLAY_I2C_FREQ_HZ            400000
-#define DISPLAY_I2C_ADDR_PRIMARY       0x3C
-#define DISPLAY_I2C_ADDR_SECONDARY     0x3D
+#define PIN_DISPLAY_MOSI               5
+#define PIN_DISPLAY_SCLK               6
+#define PIN_DISPLAY_RST                4
+#define PIN_DISPLAY_DC                 9
+#define PIN_DISPLAY_BLK                8
+
+#define DISPLAY_SPI_FREQ_HZ            (40 * 1000 * 1000)
+#define DISPLAY_SPI_MODE               3
+#define DISPLAY_WIDTH                  240
+#define DISPLAY_HEIGHT                 240
+#define DISPLAY_X_GAP                  80
+#define DISPLAY_Y_GAP                  0
+#define DISPLAY_LVGL_BUFFER_LINES      40
+#define DISPLAY_STARTUP_BRIGHTNESS_PCT 100
+#define DISPLAY_STARTUP_BLANK_MS       100
 #define DISPLAY_NO_SIGNAL_MS           3000
 
 #define BATTERY_DIVIDER_RATIO          2.010f
 #define BATTERY_ADC_CHANNEL            ADC_CHANNEL_1
 
-/*
- * SCT-013-030: 30 A / 1 V RMS.
- *
- * L1 jau sukalibruotas pagal dabartinius testus.
- * L2/L3 pradžioje naudojame tą patį faktorių, bet galutiniame
- * variante kiekvieną SCT bus galima sukalibruoti atskirai.
- */
+/* SCT-013-030: 30 A / 1 V RMS. */
 #define SCT_CURRENT_PER_VOLT_A         30.0f
 #define SCT_L1_CALIBRATION_FACTOR      0.990f
 #define SCT_L2_CALIBRATION_FACTOR      0.990f

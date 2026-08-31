@@ -60,7 +60,7 @@ void role_display_start(void){
  ESP_LOGI(TAG,"Device role: B - DISPLAY");
  q=xQueueCreate(1,sizeof(rx_t));if(!q){ESP_LOGE(TAG,"Queue failed");return;}
  ESP_ERROR_CHECK(espnow_comm_init());ESP_ERROR_CHECK(battery_monitor_init());ESP_ERROR_CHECK(mode_button_init());ESP_ERROR_CHECK(display_ui_init());espnow_comm_set_receive_callback(on_packet);
- display_ui_state_t ui={.mode=DISPLAY_MODE_GRID,.online=false,.battery_percent=0,.signal_percent=0,.rssi_dbm=0,.l1_a=0,.l2_a=0,.l3_a=0};
+ display_ui_state_t ui={.view=DISPLAY_VIEW_THREE_PHASE,.online=false,.battery_percent=0,.signal_percent=0,.rssi_dbm=0,.l1_a=0,.l2_a=0,.l3_a=0};
  int64_t boot=esp_timer_get_time(),last_rx=0,last_bat=0,last_draw=0;float fs=0;bool fs_init=false;
  while(1){
   rx_t x;
@@ -70,7 +70,41 @@ void role_display_start(void){
    ESP_LOGI(TAG,"RX #%" PRIu32 " | L1=%.3f A | L2=%.3f A | L3=%.3f A | RSSI=%d dBm | SIG=%d%%",x.packet.sequence,ui.l1_a,ui.l2_a,ui.l3_a,x.rssi,ui.signal_percent);
   }
   int64_t now=esp_timer_get_time();if(last_rx==0||now-last_rx>(int64_t)DISPLAY_NO_SIGNAL_MS*1000LL)ui.online=false;
-  if(mode_button_pressed()){ui.mode=(ui.mode==DISPLAY_MODE_GRID)?DISPLAY_MODE_GENERATOR:DISPLAY_MODE_GRID;ESP_LOGI(TAG,"Display mode: %s",ui.mode==DISPLAY_MODE_GRID?"GRID":"GENERATOR");last_draw=0;}
+  const mode_button_event_t button_event = mode_button_get_event();
+  if(button_event == MODE_BUTTON_EVENT_SHORT){
+   switch(ui.view){
+    case DISPLAY_VIEW_THREE_PHASE:
+     ui.view=DISPLAY_VIEW_SINGLE_PHASE;
+     ESP_LOGI(TAG,"View: SINGLE_PHASE");
+     break;
+    case DISPLAY_VIEW_SINGLE_PHASE:
+     ui.view=DISPLAY_VIEW_THREE_PHASE;
+     ESP_LOGI(TAG,"View: THREE_PHASE");
+     break;
+    case DISPLAY_VIEW_L1L2L3_CHART:
+     ui.view=DISPLAY_VIEW_THREE_PHASE;
+     ESP_LOGI(TAG,"View: THREE_PHASE (back from L1/L2/L3 chart)");
+     break;
+    case DISPLAY_VIEW_FULL_LOAD_CHART:
+     ui.view=DISPLAY_VIEW_SINGLE_PHASE;
+     ESP_LOGI(TAG,"View: SINGLE_PHASE (back from Full Load chart)");
+     break;
+   }
+   last_draw=0;
+  }else if(button_event == MODE_BUTTON_EVENT_DOUBLE){
+   if(ui.view==DISPLAY_VIEW_THREE_PHASE){
+    ui.view=DISPLAY_VIEW_L1L2L3_CHART;
+    ESP_LOGI(TAG,"View: L1/L2/L3 CHART");
+    last_draw=0;
+   }else if(ui.view==DISPLAY_VIEW_SINGLE_PHASE){
+    ui.view=DISPLAY_VIEW_FULL_LOAD_CHART;
+    ESP_LOGI(TAG,"View: FULL LOAD CHART");
+    last_draw=0;
+   }
+  }else if(button_event == MODE_BUTTON_EVENT_LONG){
+   /* Reserved for deep sleep. Do not change the current view. */
+   ESP_LOGI(TAG,"Long press detected (deep sleep not implemented yet)");
+  }
   if(last_bat==0||now-last_bat>=1000000LL){float v;int p;if(battery_monitor_read(&v,&p)==ESP_OK){ui.battery_percent=p;}last_bat=now;}
   ui.uptime_seconds=(unsigned)((now-boot)/1000000LL);
   if(last_draw==0||now-last_draw>=200000LL){ESP_ERROR_CHECK(display_ui_render(&ui));last_draw=now;}

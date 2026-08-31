@@ -376,32 +376,32 @@ static void update_battery(int percent)
 }
 
 
-static void update_mode(display_mode_t mode)
+static void update_view(display_view_t view)
 {
-    const bool three_phase =
-        (mode == DISPLAY_MODE_GRID);
-
     set_hidden(
         ui_ThreePhaseWINDOW,
-        !three_phase
+        view != DISPLAY_VIEW_THREE_PHASE
     );
 
     set_hidden(
         ui_SinglePhaseWINDOW,
-        three_phase
-    );
-
-    /*
-     * Exact SquareLine-object behavior requested.
-     */
-    set_hidden(
-        ui_ButtomINFOSinglePhase,
-        !three_phase
+        view != DISPLAY_VIEW_SINGLE_PHASE
     );
 
     set_hidden(
-        ui_BottomINFOFullLoad,
-        three_phase
+        ui_L1L2L3Chart,
+        view != DISPLAY_VIEW_L1L2L3_CHART
+    );
+
+    set_hidden(
+        ui_FullLoadChart,
+        view != DISPLAY_VIEW_FULL_LOAD_CHART
+    );
+
+    /* BottomINFONavigation is intentionally always visible. */
+    set_hidden(
+        ui_BottomINFONavigation,
+        false
     );
 }
 
@@ -414,32 +414,32 @@ static void update_measurements(
 
         lv_label_set_text(
             ui_L1AMPS,
-            "L1 : --.-- A"
+            " --.-- A"
         );
 
         lv_label_set_text(
             ui_L2AMPS,
-            "L2 : --.-- A"
+            " --.-- A"
         );
 
         lv_label_set_text(
             ui_L3AMPS,
-            "L3 : --.-- A"
+            "--.-- A"
         );
 
         lv_label_set_text(
             ui_L1KVA,
-            "--.-- KVA"
+            "--.-- kVA"
         );
 
         lv_label_set_text(
             ui_L2KVA,
-            "--.-- KVA"
+            "--.-- kVA"
         );
 
         lv_label_set_text(
             ui_L3KVA,
-            "--.-- KVA"
+            "--.-- kVA"
         );
 
         lv_label_set_text(
@@ -449,7 +449,7 @@ static void update_measurements(
 
         lv_label_set_text(
             ui_ThreePhasesFullKVA,
-            "--.-- KVA"
+            "--.-- kVA"
         );
 
         return;
@@ -500,21 +500,21 @@ static void update_measurements(
 
     lv_label_set_text_fmt(
         ui_L1AMPS,
-        "L1 : %d.%02d A",
+        " %d.%02d A",
         l1_ca / 100,
         l1_ca % 100
     );
 
     lv_label_set_text_fmt(
         ui_L2AMPS,
-        "L2 : %d.%02d A",
+        " %d.%02d A",
         l2_ca / 100,
         l2_ca % 100
     );
 
     lv_label_set_text_fmt(
         ui_L3AMPS,
-        "L3 : %d.%02d A",
+        " %d.%02d A",
         l3_ca / 100,
         l3_ca % 100
     );
@@ -577,7 +577,7 @@ static void render_locked(
 
     update_signal(state);
     update_battery(state->battery_percent);
-    update_mode(state->mode);
+    update_view(state->view);
     update_measurements(state);
 }
 
@@ -603,7 +603,7 @@ esp_err_t display_ui_init(void)
      * battery unknown / 0%.
      */
     const display_ui_state_t initial = {
-        .mode = DISPLAY_MODE_GRID,
+        .view = DISPLAY_VIEW_THREE_PHASE,
         .online = false,
         .uptime_seconds = 0,
         .battery_percent = 0,

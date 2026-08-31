@@ -4,12 +4,14 @@
 #include "esp_err.h"
 
 typedef enum {
-    DISPLAY_MODE_GRID = 0,       /* ThreePhaseWINDOW */
-    DISPLAY_MODE_GENERATOR = 1,  /* SinglePhaseWINDOW / total load */
-} display_mode_t;
+    DISPLAY_VIEW_THREE_PHASE = 0,
+    DISPLAY_VIEW_SINGLE_PHASE,
+    DISPLAY_VIEW_L1L2L3_CHART,
+    DISPLAY_VIEW_FULL_LOAD_CHART,
+} display_view_t;
 
 typedef struct {
-    display_mode_t mode;
+    display_view_t view;
     bool online;
     unsigned uptime_seconds;
     int battery_percent;

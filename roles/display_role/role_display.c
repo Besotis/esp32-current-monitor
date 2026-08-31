@@ -61,12 +61,19 @@ void role_display_start(void){
  q=xQueueCreate(1,sizeof(rx_t));if(!q){ESP_LOGE(TAG,"Queue failed");return;}
  ESP_ERROR_CHECK(espnow_comm_init());ESP_ERROR_CHECK(battery_monitor_init());ESP_ERROR_CHECK(mode_button_init());ESP_ERROR_CHECK(display_ui_init());espnow_comm_set_receive_callback(on_packet);
  display_ui_state_t ui={.view=DISPLAY_VIEW_THREE_PHASE,.online=false,.battery_percent=0,.signal_percent=0,.rssi_dbm=0,.l1_a=0,.l2_a=0,.l3_a=0};
- int64_t boot=esp_timer_get_time(),last_rx=0,last_bat=0,last_draw=0,last_chart_sample=0;float fs=0;bool fs_init=false;
+ int64_t boot=esp_timer_get_time(),last_rx=0,last_bat=0,last_draw=0,last_chart_sample=esp_timer_get_time();float fs=0;bool fs_init=false;
+ float chart_peak_l1=0.0f,chart_peak_l2=0.0f,chart_peak_l3=0.0f,chart_peak_total=0.0f;bool chart_peak_valid=false;
  while(1){
   rx_t x;
   if(xQueueReceive(q,&x,pdMS_TO_TICKS(10))==pdTRUE){
    last_rx=esp_timer_get_time();ui.online=true;ui.rssi_dbm=x.rssi;ui.l1_a=x.packet.current_l1_a;ui.l2_a=x.packet.current_l2_a;ui.l3_a=x.packet.current_l3_a;
    int ns=sig(x.rssi);if(!fs_init){fs=ns;fs_init=true;}else fs=fs*0.8f+ns*0.2f;ui.signal_percent=(int)(fs+0.5f);
+   /* Keep the peak of every received measurement inside the current 20 s chart bucket.
+    * Full-load peak is the maximum simultaneous L1+L2+L3 sum, not the sum of
+    * three phase peaks that may have happened at different times. */
+   const float chart_total_now=ui.l1_a+ui.l2_a+ui.l3_a;
+   if(!chart_peak_valid){chart_peak_l1=ui.l1_a;chart_peak_l2=ui.l2_a;chart_peak_l3=ui.l3_a;chart_peak_total=chart_total_now;chart_peak_valid=true;}
+   else{if(ui.l1_a>chart_peak_l1)chart_peak_l1=ui.l1_a;if(ui.l2_a>chart_peak_l2)chart_peak_l2=ui.l2_a;if(ui.l3_a>chart_peak_l3)chart_peak_l3=ui.l3_a;if(chart_total_now>chart_peak_total)chart_peak_total=chart_total_now;}
    ESP_LOGI(TAG,"RX #%" PRIu32 " | L1=%.3f A | L2=%.3f A | L3=%.3f A | RSSI=%d dBm | SIG=%d%%",x.packet.sequence,ui.l1_a,ui.l2_a,ui.l3_a,x.rssi,ui.signal_percent);
   }
   int64_t now=esp_timer_get_time();if(last_rx==0||now-last_rx>(int64_t)DISPLAY_NO_SIGNAL_MS*1000LL)ui.online=false;
@@ -107,12 +114,14 @@ void role_display_start(void){
   }
   if(last_bat==0||now-last_bat>=1000000LL){float v;int p;if(battery_monitor_read(&v,&p)==ESP_OK){ui.battery_percent=p;}last_bat=now;}
 
-  /* 60 points x 60 s = one hour of history.
-   * Take the first real sample as soon as data arrives, then one sample/min. */
-  if((last_chart_sample==0 && ui.online) ||
-     (last_chart_sample!=0 && now-last_chart_sample>=60000000LL)){
-   ESP_ERROR_CHECK(display_ui_chart_add_sample(&ui));
-   last_chart_sample=now;
+  /* 180 points x 20 s = one hour of history.
+   * Each chart point is the MAX observed during its 20 s bucket. */
+  if(now-last_chart_sample>=20000000LL){
+   ESP_ERROR_CHECK(display_ui_chart_add_sample(chart_peak_l1,chart_peak_l2,chart_peak_l3,chart_peak_total,chart_peak_valid));
+   chart_peak_l1=0.0f;chart_peak_l2=0.0f;chart_peak_l3=0.0f;chart_peak_total=0.0f;chart_peak_valid=false;
+   /* Keep the buckets on a stable 20 s cadence even if this loop wakes slightly late. */
+   last_chart_sample += 20000000LL;
+   if(now-last_chart_sample>=20000000LL)last_chart_sample=now;
   }
   ui.uptime_seconds=(unsigned)((now-boot)/1000000LL);
   if(last_draw==0||now-last_draw>=200000LL){ESP_ERROR_CHECK(display_ui_render(&ui));last_draw=now;}

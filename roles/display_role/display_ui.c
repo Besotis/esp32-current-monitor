@@ -13,16 +13,23 @@
 
 static const char *TAG = "DISPLAY_UI";
 
-#define CHART_POINT_COUNT          60
+#define CHART_POINT_COUNT         180
 #define CHART_PHASE_SCALE_X10      10
 #define CHART_TOTAL_SCALE_X10      10
 #define CHART_DEFAULT_MAX_X10      50   /* Start at 0..5 A */
-#define CHART_VERTICAL_DIV_LINES    7   /* Keep the existing time grid */
+#define CHART_X_DIV_LINES_NORMAL    7   /* 15/30/60 min: 6 equal X intervals */
+#define CHART_X_DIV_LINES_5MIN     11   /* 0..5 min: 10 grid intervals = 30 s each */
 #define CHART_Y_LABEL_COUNT         4
 #define CHART_Y_LABEL_COLOR    0xE2E2E2
 #define CHART_Y_LABEL_X_PAD_PX      4
 #define CHART_Y_PLOT_TOP_PAD_PX      4
 #define CHART_Y_PLOT_BOTTOM_PAD_PX   12
+#define CHART_X_LABEL_COUNT         3
+#define CHART_X_LABEL_COLOR    0xE2E2E2
+#define CHART_X_PLOT_LEFT_PAD_PX     4
+#define CHART_X_PLOT_RIGHT_PAD_PX   12
+#define CHART_X_LABEL_Y_OFFSET_PX   10
+#define CHART_X_LAST_LABEL_OFFSET_PX -4
 
 static lv_chart_series_t *s_chart_l1 = NULL;
 static lv_chart_series_t *s_chart_l2 = NULL;
@@ -38,6 +45,9 @@ static lv_coord_t s_chart_total_points[CHART_POINT_COUNT];
 
 static lv_obj_t *s_phase_y_labels[CHART_Y_LABEL_COUNT];
 static lv_obj_t *s_total_y_labels[CHART_Y_LABEL_COUNT];
+static lv_obj_t *s_phase_x_labels[CHART_X_LABEL_COUNT];
+static lv_obj_t *s_total_x_labels[CHART_X_LABEL_COUNT];
+static int s_chart_time_window_min = -1;
 static int s_phase_scale_max_a = -1;
 static int s_total_scale_max_a = -1;
 static int s_chart_sample_count = 0;
@@ -309,7 +319,9 @@ static void chart_apply_scale(lv_obj_t *chart,
 
     /* Chart values are stored in 0.1 A units. */
     lv_chart_set_axis_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, scale.max_a * 10);
-    lv_chart_set_div_line_count(chart, scale.div_lines, CHART_VERTICAL_DIV_LINES);
+    lv_chart_set_div_line_count(chart, scale.div_lines,
+                                s_chart_time_window_min == 5 ? CHART_X_DIV_LINES_5MIN
+                                                             : CHART_X_DIV_LINES_NORMAL);
 
     for (int i = 0; i < CHART_Y_LABEL_COUNT; ++i) {
         if (i >= scale.label_count) {
@@ -353,6 +365,95 @@ static void chart_apply_scale(lv_obj_t *chart,
     }
 
     lv_chart_refresh(chart);
+}
+
+static void chart_create_x_labels(lv_obj_t *chart, lv_obj_t **labels)
+{
+    for (int i = 0; i < CHART_X_LABEL_COUNT; ++i) {
+        labels[i] = lv_label_create(chart);
+        lv_obj_set_size(labels[i], LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_style_text_color(labels[i], lv_color_hex(CHART_X_LABEL_COLOR),
+                                    LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_opa(labels[i], LV_OPA_COVER,
+                                  LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(labels[i], &lv_font_montserrat_12,
+                                   LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_align(labels[i], LV_ALIGN_BOTTOM_LEFT);
+        lv_obj_set_y(labels[i], CHART_X_LABEL_Y_OFFSET_PX);
+    }
+}
+
+static void chart_position_x_labels(lv_obj_t *chart, lv_obj_t **labels,
+                                    int window_min)
+{
+    const int values_5[3]  = {1, 3, 5};
+    const int values_15[3] = {5, 10, 15};
+    const int values_30[3] = {10, 20, 30};
+    const int values_60[3] = {20, 40, 60};
+    const int *values = window_min <= 5 ? values_5
+                      : window_min <= 15 ? values_15
+                      : window_min <= 30 ? values_30 : values_60;
+
+    lv_obj_update_layout(chart);
+    const int32_t chart_w = lv_obj_get_width(chart);
+    const int32_t plot_left = CHART_X_PLOT_LEFT_PAD_PX;
+    const int32_t plot_right = chart_w > 0
+        ? chart_w - 1 - CHART_X_PLOT_RIGHT_PAD_PX : 0;
+    const int32_t plot_w = plot_right > plot_left ? plot_right - plot_left : 0;
+
+    for (int i = 0; i < CHART_X_LABEL_COUNT; ++i) {
+        if (i == CHART_X_LABEL_COUNT - 1) {
+            /* Last label intentionally has no "min" so it fits on 240 px. */
+            lv_label_set_text_fmt(labels[i], "%d", values[i]);
+        } else {
+            lv_label_set_text_fmt(labels[i], "%dmin", values[i]);
+        }
+        lv_obj_update_layout(labels[i]);
+        const int32_t label_w = lv_obj_get_width(labels[i]);
+        const int32_t x = plot_left + ((int32_t)values[i] * plot_w) / window_min;
+        const int32_t last_offset = (i == CHART_X_LABEL_COUNT - 1)
+            ? CHART_X_LAST_LABEL_OFFSET_PX : 0;
+        lv_obj_set_x(labels[i], x - label_w / 2 + last_offset);
+    }
+}
+
+static void chart_update_time_window(void)
+{
+    /* Samples arrive every 20 s: 15=5 min, 45=15 min, 90=30 min, 180=60 min. */
+    const int window_min = s_chart_sample_count <= 15 ? 5
+                         : s_chart_sample_count <= 45 ? 15
+                         : s_chart_sample_count <= 90 ? 30 : 60;
+    if (window_min == s_chart_time_window_min) {
+        return;
+    }
+    s_chart_time_window_min = window_min;
+
+    /* Change X spacing for the active time window while keeping the full
+     * 180-point / 60-minute history buffers intact. */
+    const int visible_points = window_min * 3; /* one point every 20 s */
+    lv_chart_set_point_count(ui_L1L2L3Chart, visible_points);
+    lv_chart_set_point_count(ui_FullLoadChart, visible_points);
+
+    const int x_div_lines = window_min == 5 ? CHART_X_DIV_LINES_5MIN
+                                             : CHART_X_DIV_LINES_NORMAL;
+    /* Preserve each chart's current dynamic Y grid while changing only X grid density. */
+    const chart_scale_t phase_scale = chart_scale_for_max_x10(chart_points_max(
+        s_chart_l1_points, s_chart_l2_points, s_chart_l3_points));
+    const chart_scale_t total_scale = chart_scale_for_max_x10(chart_points_max(
+        s_chart_total_points, NULL, NULL));
+    lv_chart_set_div_line_count(ui_L1L2L3Chart, phase_scale.div_lines, x_div_lines);
+    lv_chart_set_div_line_count(ui_FullLoadChart, total_scale.div_lines, x_div_lines);
+
+    /* Re-bind external arrays after point-count changes. */
+    if (s_chart_l1 != NULL) lv_chart_set_series_ext_y_array(ui_L1L2L3Chart, s_chart_l1, s_chart_l1_points);
+    if (s_chart_l2 != NULL) lv_chart_set_series_ext_y_array(ui_L1L2L3Chart, s_chart_l2, s_chart_l2_points);
+    if (s_chart_l3 != NULL) lv_chart_set_series_ext_y_array(ui_L1L2L3Chart, s_chart_l3, s_chart_l3_points);
+    if (s_chart_total != NULL) lv_chart_set_series_ext_y_array(ui_FullLoadChart, s_chart_total, s_chart_total_points);
+
+    chart_position_x_labels(ui_L1L2L3Chart, s_phase_x_labels, window_min);
+    chart_position_x_labels(ui_FullLoadChart, s_total_x_labels, window_min);
+    lv_chart_refresh(ui_L1L2L3Chart);
+    lv_chart_refresh(ui_FullLoadChart);
 }
 
 static void chart_update_dynamic_scales(void)
@@ -403,7 +504,10 @@ static void chart_init_runtime(void)
 
     chart_create_y_labels(ui_L1L2L3Chart, s_phase_y_labels);
     chart_create_y_labels(ui_FullLoadChart, s_total_y_labels);
+    chart_create_x_labels(ui_L1L2L3Chart, s_phase_x_labels);
+    chart_create_x_labels(ui_FullLoadChart, s_total_x_labels);
     chart_update_dynamic_scales();
+    chart_update_time_window();
 }
 
 static lv_coord_t chart_current_x10(float amps)
@@ -878,11 +982,8 @@ esp_err_t display_ui_init(void)
 }
 
 
-esp_err_t display_ui_chart_add_sample(const display_ui_state_t *state)
+esp_err_t display_ui_chart_add_sample(float l1_a, float l2_a, float l3_a, float total_a, bool valid)
 {
-    if (state == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
 
     if (!lvgl_port_lock(0)) {
         return ESP_ERR_TIMEOUT;
@@ -897,7 +998,7 @@ esp_err_t display_ui_chart_add_sample(const display_ui_state_t *state)
     }
 
     /* Fill from left to right while the first 60 minutes are collected.
-     * Only after the history is full do we shift the oldest sample out. */
+     * At 20 s/sample, 180 points = 60 minutes. Only then shift oldest out. */
     int index;
     if (s_chart_sample_count < CHART_POINT_COUNT) {
         index = s_chart_sample_count++;
@@ -911,14 +1012,13 @@ esp_err_t display_ui_chart_add_sample(const display_ui_state_t *state)
         index = CHART_POINT_COUNT - 1;
     }
 
-    if (state->online) {
-        const float total_a = state->l1_a + state->l2_a + state->l3_a;
-        s_chart_l1_points[index] = chart_current_x10(state->l1_a);
-        s_chart_l2_points[index] = chart_current_x10(state->l2_a);
-        s_chart_l3_points[index] = chart_current_x10(state->l3_a);
+    if (valid) {
+        s_chart_l1_points[index] = chart_current_x10(l1_a);
+        s_chart_l2_points[index] = chart_current_x10(l2_a);
+        s_chart_l3_points[index] = chart_current_x10(l3_a);
         s_chart_total_points[index] = chart_current_x10(total_a);
     } else {
-        /* A missing minute is a gap, not a fake 0 A measurement. */
+        /* No received measurement in this 20 s bucket: draw a gap, not fake 0 A. */
         s_chart_l1_points[index] = LV_CHART_POINT_NONE;
         s_chart_l2_points[index] = LV_CHART_POINT_NONE;
         s_chart_l3_points[index] = LV_CHART_POINT_NONE;
@@ -926,6 +1026,7 @@ esp_err_t display_ui_chart_add_sample(const display_ui_state_t *state)
     }
 
     chart_update_dynamic_scales();
+    chart_update_time_window();
     lv_chart_refresh(ui_L1L2L3Chart);
     lv_chart_refresh(ui_FullLoadChart);
 

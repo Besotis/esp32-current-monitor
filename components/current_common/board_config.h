@@ -62,7 +62,7 @@
 #define DISPLAY_STARTUP_BLANK_MS       100
 #define DISPLAY_NO_SIGNAL_MS           3000
 
-#define BATTERY_DIVIDER_RATIO          2.010f
+#define BATTERY_DIVIDER_RATIO          1.999f
 #define BATTERY_ADC_CHANNEL            ADC_CHANNEL_1
 
 /* SCT-013-030: 30 A / 1 V RMS. */

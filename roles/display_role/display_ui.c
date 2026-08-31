@@ -13,6 +13,24 @@
 
 static const char *TAG = "DISPLAY_UI";
 
+#define CHART_POINT_COUNT          60
+#define CHART_PHASE_SCALE_X10      10
+#define CHART_TOTAL_SCALE_X10      10
+#define CHART_PHASE_MAX_X10       300   /* 30.0 A */
+#define CHART_TOTAL_MAX_X10       800   /* 80.0 A, matches SquareLine scale */
+
+static lv_chart_series_t *s_chart_l1 = NULL;
+static lv_chart_series_t *s_chart_l2 = NULL;
+static lv_chart_series_t *s_chart_l3 = NULL;
+static lv_chart_series_t *s_chart_total = NULL;
+
+/* SquareLine exports 1-element external arrays for the placeholder data.
+ * Replace them with correctly sized buffers before the charts are used. */
+static lv_coord_t s_chart_l1_points[CHART_POINT_COUNT];
+static lv_coord_t s_chart_l2_points[CHART_POINT_COUNT];
+static lv_coord_t s_chart_l3_points[CHART_POINT_COUNT];
+static lv_coord_t s_chart_total_points[CHART_POINT_COUNT];
+
 
 /* ============================================================
  * BATTERY COLORS
@@ -185,6 +203,84 @@ static lv_color_t signal_color_from_percent(int percent)
     return lv_color_hex(SIGNAL_COLOR_100_PCT);
 }
 
+
+static void chart_fill_none(lv_coord_t *points)
+{
+    for (int i = 0; i < CHART_POINT_COUNT; ++i) {
+        points[i] = LV_CHART_POINT_NONE;
+    }
+}
+
+static void chart_init_runtime(void)
+{
+    /* Keep the visual 0..30 A and 0..80 A scales designed in SquareLine,
+     * but store values in 0.1 A units so the lines retain useful resolution. */
+    lv_chart_set_axis_range(
+        ui_L1L2L3Chart,
+        LV_CHART_AXIS_PRIMARY_Y,
+        0,
+        CHART_PHASE_MAX_X10
+    );
+
+    lv_chart_set_axis_range(
+        ui_FullLoadChart,
+        LV_CHART_AXIS_PRIMARY_Y,
+        0,
+        CHART_TOTAL_MAX_X10
+    );
+
+    lv_chart_set_update_mode(
+        ui_L1L2L3Chart,
+        LV_CHART_UPDATE_MODE_SHIFT
+    );
+    lv_chart_set_update_mode(
+        ui_FullLoadChart,
+        LV_CHART_UPDATE_MODE_SHIFT
+    );
+
+    s_chart_l1 = lv_chart_get_series_next(ui_L1L2L3Chart, NULL);
+    s_chart_l2 = lv_chart_get_series_next(ui_L1L2L3Chart, s_chart_l1);
+    s_chart_l3 = lv_chart_get_series_next(ui_L1L2L3Chart, s_chart_l2);
+    s_chart_total = lv_chart_get_series_next(ui_FullLoadChart, NULL);
+
+    chart_fill_none(s_chart_l1_points);
+    chart_fill_none(s_chart_l2_points);
+    chart_fill_none(s_chart_l3_points);
+    chart_fill_none(s_chart_total_points);
+
+    if (s_chart_l1 != NULL) {
+        lv_chart_set_series_ext_y_array(
+            ui_L1L2L3Chart, s_chart_l1, s_chart_l1_points
+        );
+    }
+    if (s_chart_l2 != NULL) {
+        lv_chart_set_series_ext_y_array(
+            ui_L1L2L3Chart, s_chart_l2, s_chart_l2_points
+        );
+    }
+    if (s_chart_l3 != NULL) {
+        lv_chart_set_series_ext_y_array(
+            ui_L1L2L3Chart, s_chart_l3, s_chart_l3_points
+        );
+    }
+    if (s_chart_total != NULL) {
+        lv_chart_set_series_ext_y_array(
+            ui_FullLoadChart, s_chart_total, s_chart_total_points
+        );
+    }
+
+    lv_chart_refresh(ui_L1L2L3Chart);
+    lv_chart_refresh(ui_FullLoadChart);
+}
+
+static lv_coord_t chart_current_x10(float amps)
+{
+    if (amps <= 0.0f) {
+        return 0;
+    }
+
+    return (lv_coord_t)(amps * 10.0f + 0.5f);
+}
 
 static void set_hidden(lv_obj_t *obj, bool hidden)
 {
@@ -595,6 +691,7 @@ esp_err_t display_ui_init(void)
     }
 
     ui_init();
+    chart_init_runtime();
 
     /*
      * Initial frame:
@@ -647,6 +744,59 @@ esp_err_t display_ui_init(void)
     return ESP_OK;
 }
 
+
+esp_err_t display_ui_chart_add_sample(const display_ui_state_t *state)
+{
+    if (state == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!lvgl_port_lock(0)) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    if (s_chart_l1 == NULL ||
+        s_chart_l2 == NULL ||
+        s_chart_l3 == NULL ||
+        s_chart_total == NULL) {
+        lvgl_port_unlock();
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (state->online) {
+        const float total_a = state->l1_a + state->l2_a + state->l3_a;
+
+        lv_chart_set_next_value(
+            ui_L1L2L3Chart, s_chart_l1, chart_current_x10(state->l1_a)
+        );
+        lv_chart_set_next_value(
+            ui_L1L2L3Chart, s_chart_l2, chart_current_x10(state->l2_a)
+        );
+        lv_chart_set_next_value(
+            ui_L1L2L3Chart, s_chart_l3, chart_current_x10(state->l3_a)
+        );
+        lv_chart_set_next_value(
+            ui_FullLoadChart, s_chart_total, chart_current_x10(total_a)
+        );
+    } else {
+        /* A missing minute is a gap, not a fake 0 A measurement. */
+        lv_chart_set_next_value(
+            ui_L1L2L3Chart, s_chart_l1, LV_CHART_POINT_NONE
+        );
+        lv_chart_set_next_value(
+            ui_L1L2L3Chart, s_chart_l2, LV_CHART_POINT_NONE
+        );
+        lv_chart_set_next_value(
+            ui_L1L2L3Chart, s_chart_l3, LV_CHART_POINT_NONE
+        );
+        lv_chart_set_next_value(
+            ui_FullLoadChart, s_chart_total, LV_CHART_POINT_NONE
+        );
+    }
+
+    lvgl_port_unlock();
+    return ESP_OK;
+}
 
 esp_err_t display_ui_render(
     const display_ui_state_t *state

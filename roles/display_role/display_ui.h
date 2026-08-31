@@ -24,3 +24,4 @@ typedef struct {
 
 esp_err_t display_ui_init(void);
 esp_err_t display_ui_render(const display_ui_state_t *state);
+esp_err_t display_ui_chart_add_sample(const display_ui_state_t *state);

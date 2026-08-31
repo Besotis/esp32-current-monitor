@@ -28,6 +28,7 @@ extern lv_obj_t *ui_Battery_container;
 extern lv_obj_t *ui_BatteryBODY;
 extern lv_obj_t *ui_Bar1;
 extern lv_obj_t *ui_BatteryTIP;
+extern lv_obj_t *ui_Temperature;
 extern lv_obj_t *ui_UPtime;
 extern lv_obj_t *ui_BOTTOMsection;
 extern lv_obj_t *ui_BottomINFONavigation;
@@ -56,9 +57,6 @@ extern lv_obj_t *ui_lable0;
 extern lv_obj_t *ui_time20lable;
 extern lv_obj_t *ui_time40lable;
 extern lv_obj_t *ui_time60lable;
-extern lv_obj_t *ui_amps10lable;
-extern lv_obj_t *ui_amps20lable;
-extern lv_obj_t *ui_amps30lable;
 extern lv_obj_t *ui_FullLoadChart;
 extern lv_obj_t *ui_FullLoadChart_Xaxis;
 extern lv_obj_t *ui_FullLoadChart_Yaxis1;
@@ -67,10 +65,6 @@ extern lv_obj_t *ui_fulllable0;
 extern lv_obj_t *ui_fulltime20lable;
 extern lv_obj_t *ui_fulltime40lable;
 extern lv_obj_t *ui_fulltime60lable;
-extern lv_obj_t *ui_fullamps20lable;
-extern lv_obj_t *ui_fullamps40lable;
-extern lv_obj_t *ui_fullamps60lable;
-extern lv_obj_t *ui_fullamps80lable;
 // CUSTOM VARIABLES
 
 #ifdef __cplusplus

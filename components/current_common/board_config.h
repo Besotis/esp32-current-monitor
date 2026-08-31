@@ -59,7 +59,7 @@
 #define DISPLAY_X_GAP                  80
 #define DISPLAY_Y_GAP                  0
 #define DISPLAY_LVGL_BUFFER_LINES      40
-#define DISPLAY_STARTUP_BRIGHTNESS_PCT 100
+#define DISPLAY_STARTUP_BRIGHTNESS_PCT 50
 #define DISPLAY_STARTUP_BLANK_MS       100
 #define DISPLAY_NO_SIGNAL_MS           3000
 

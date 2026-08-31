@@ -17,7 +17,7 @@
  */
 #define BUTTON_DEBOUNCE_US       25000LL
 #define BUTTON_DOUBLE_GAP_US    450000LL
-#define BUTTON_LONG_PRESS_US   1200000LL
+#define BUTTON_LONG_PRESS_US   3000000LL
 
 esp_err_t mode_button_init(void)
 {

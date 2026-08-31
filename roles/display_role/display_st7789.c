@@ -12,7 +12,10 @@
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
 #include "esp_log.h"
+#include "esp_sleep.h"
 #include "esp_lvgl_port.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static const char *TAG = "ST7789";
 
@@ -31,11 +34,20 @@ static bool s_backlight_pwm_ready = false;
 
 esp_err_t display_st7789_early_backlight_off(void)
 {
-    /*
-     * Do this as early as possible.  For absolutely artifact-free cold boot,
-     * a small external pulldown (for example 10 kOhm) on BLK is still useful,
-     * because software cannot control the pin before the ESP32 starts.
-     */
+    /* IMPORTANT: do not release a deep-sleep BLK hold here.  On an EXT1 wake
+     * the button still has to pass the 3 s validation, and BLK must remain
+     * physically LOW during that whole check.  On a normal cold boot there
+     * is no retained hold, so forcing the pin LOW is safe. */
+    if (esp_sleep_get_wakeup_causes() & (1UL << ESP_SLEEP_WAKEUP_EXT1)) {
+        return ESP_OK;
+    }
+    return display_st7789_release_backlight_hold_off();
+}
+
+esp_err_t display_st7789_release_backlight_hold_off(void)
+{
+    gpio_deep_sleep_hold_dis();
+    gpio_hold_dis(PIN_DISPLAY_BLK);
     ESP_RETURN_ON_ERROR(gpio_reset_pin(PIN_DISPLAY_BLK), TAG, "BLK reset failed");
     ESP_RETURN_ON_ERROR(gpio_set_direction(PIN_DISPLAY_BLK, GPIO_MODE_OUTPUT), TAG, "BLK direction failed");
     ESP_RETURN_ON_ERROR(gpio_set_level(PIN_DISPLAY_BLK, 0), TAG, "BLK off failed");
@@ -185,4 +197,46 @@ esp_err_t display_st7789_panel_set_visible(bool visible)
         return ESP_ERR_INVALID_STATE;
     }
     return esp_lcd_panel_disp_on_off(s_panel, visible);
+}
+
+
+esp_err_t display_st7789_backlight_sleep_hold(void)
+{
+    /* Disconnect LEDC from BLK and force the physical pin LOW.  Keep that
+     * level latched for the whole deep-sleep period so a floating/pulled-up
+     * BLK input cannot leave a faint backlight glow. */
+    if (s_backlight_pwm_ready) {
+        ESP_RETURN_ON_ERROR(ledc_stop(BL_PWM_MODE, BL_PWM_CHANNEL, 0), TAG, "Stop BL PWM failed");
+        s_backlight_pwm_ready = false;
+    }
+    ESP_RETURN_ON_ERROR(gpio_reset_pin(PIN_DISPLAY_BLK), TAG, "BLK reset before sleep failed");
+    ESP_RETURN_ON_ERROR(gpio_set_direction(PIN_DISPLAY_BLK, GPIO_MODE_OUTPUT), TAG, "BLK output before sleep failed");
+    ESP_RETURN_ON_ERROR(gpio_set_level(PIN_DISPLAY_BLK, 0), TAG, "BLK LOW before sleep failed");
+    ESP_RETURN_ON_ERROR(gpio_hold_en(PIN_DISPLAY_BLK), TAG, "BLK hold failed");
+    gpio_deep_sleep_hold_en();
+    ESP_LOGI(TAG, "Backlight forced LOW and held for deep sleep");
+    return ESP_OK;
+}
+
+esp_err_t display_st7789_prepare_sleep(void)
+{
+    /* First remove the visible light, then stop the ST7789 panel output and
+     * finally put the controller itself into Sleep IN.  TFT VCC remains
+     * powered on this board, so this reduces controller activity but does not
+     * electrically disconnect the display module. */
+    ESP_RETURN_ON_ERROR(display_st7789_backlight_set(0), TAG, "Backlight off before sleep failed");
+
+    if (s_panel != NULL) {
+        ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, false), TAG, "Panel OFF before sleep failed");
+    }
+
+    if (s_io != NULL) {
+        /* ST7789 Sleep IN command (SLPIN). No parameters. */
+        ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(s_io, 0x10, NULL, 0), TAG, "ST7789 Sleep IN failed");
+        /* ST7789 requires a settling delay after SLPIN. */
+        vTaskDelay(pdMS_TO_TICKS(120));
+    }
+
+    ESP_LOGI(TAG, "Display prepared for deep sleep");
+    return ESP_OK;
 }

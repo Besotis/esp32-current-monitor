@@ -11,6 +11,8 @@
 #include "protocol.h"
 #include "temperature_monitor.h"
 #include "esp_log.h"
+#include "esp_sleep.h"
+#include "driver/gpio.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -54,10 +56,44 @@ static int sig(int8_t r)
     return 1;
 }
 static void on_packet(const current_data_packet_t *p,const uint8_t mac[6],int8_t rssi){if(!q||!p||!mac||!same(mac,DEVICE_A_MAC))return;rx_t x={.packet=*p,.rssi=rssi};memcpy(x.mac,mac,6);xQueueOverwrite(q,&x);}
+static void arm_button_wakeup_and_sleep(void)
+{
+    /* Wake button is active LOW.  Always enter sleep only after release, so
+     * the press that requested sleep cannot immediately wake the chip. */
+    while(gpio_get_level(PIN_MODE_BUTTON)==0){vTaskDelay(pdMS_TO_TICKS(10));}
+    vTaskDelay(pdMS_TO_TICKS(30));
+    ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(1ULL << PIN_MODE_BUTTON, ESP_EXT1_WAKEUP_ANY_LOW));
+    ESP_LOGI(TAG,"Deep sleep armed. Hold button 3 s to wake.");
+    vTaskDelay(pdMS_TO_TICKS(20));
+    esp_deep_sleep_start();
+}
+
+static void validate_deep_sleep_wakeup(void)
+{
+    if (!(esp_sleep_get_wakeup_causes() & (1UL << ESP_SLEEP_WAKEUP_EXT1))) return;
+
+    ESP_LOGI(TAG,"Wake button detected: keep holding for 3 s");
+    const int64_t started=esp_timer_get_time();
+    while(esp_timer_get_time()-started<3000000LL){
+        if(gpio_get_level(PIN_MODE_BUTTON)!=0){
+            ESP_LOGI(TAG,"Wake hold shorter than 3 s - returning to deep sleep");
+            arm_button_wakeup_and_sleep();
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    ESP_LOGI(TAG,"Wake hold confirmed (3 s)");
+}
 
 void role_display_start(void){
  /* Hide TFT immediately, before Wi-Fi/ESP-NOW init, to suppress boot artifacts. */
  ESP_ERROR_CHECK(display_st7789_early_backlight_off());
+ /* GPIO3 must be configured before validating a deep-sleep wake press. */
+ ESP_ERROR_CHECK(gpio_set_direction(PIN_MODE_BUTTON, GPIO_MODE_INPUT));
+ ESP_ERROR_CHECK(gpio_set_pull_mode(PIN_MODE_BUTTON, GPIO_PULLUP_ONLY));
+ validate_deep_sleep_wakeup();
+ /* Only after a valid 3 s wake may BLK leave its retained LOW state.
+  * A short wake press returns to deep sleep before reaching this line. */
+ ESP_ERROR_CHECK(display_st7789_release_backlight_hold_off());
  ESP_LOGI(TAG,"Device role: B - DISPLAY");
  q=xQueueCreate(1,sizeof(rx_t));if(!q){ESP_LOGE(TAG,"Queue failed");return;}
  ESP_ERROR_CHECK(espnow_comm_init());ESP_ERROR_CHECK(battery_monitor_init());ESP_ERROR_CHECK(temperature_monitor_init());ESP_ERROR_CHECK(mode_button_init());ESP_ERROR_CHECK(display_ui_init());espnow_comm_set_receive_callback(on_packet);
@@ -110,8 +146,15 @@ void role_display_start(void){
     last_draw=0;
    }
   }else if(button_event == MODE_BUTTON_EVENT_LONG){
-   /* Reserved for deep sleep. Do not change the current view. */
-   ESP_LOGI(TAG,"Long press detected (deep sleep not implemented yet)");
+   ESP_LOGI(TAG,"Long press 3.0 s: preparing deep sleep");
+
+   /* The LONG event is generated while the button is still held LOW.  Wait
+    * for release before arming an active-LOW wake source; otherwise the same
+    * press could wake the ESP32 immediately after entering deep sleep. */
+   ESP_ERROR_CHECK(display_st7789_prepare_sleep());
+   ESP_ERROR_CHECK(display_st7789_backlight_sleep_hold());
+   ESP_LOGI(TAG,"Release button to arm wake-up...");
+   arm_button_wakeup_and_sleep();
   }
   if(last_bat==0||now-last_bat>=1000000LL){float v;int p;if(battery_monitor_read(&v,&p)==ESP_OK){ui.battery_percent=p;}last_bat=now;}
   if(last_temp==0||now-last_temp>=3000000LL){float t;if(temperature_monitor_read(&t)==ESP_OK){ui.temperature_c=t;ui.temperature_valid=true;}else{ui.temperature_valid=false;}last_temp=now;}

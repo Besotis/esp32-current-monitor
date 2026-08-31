@@ -20,6 +20,7 @@ idf_component_register(
         current_common
         esp_adc
         esp_timer
+        esp_hw_support
         esp_lcd
         esp_lvgl_port
         lvgl

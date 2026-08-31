@@ -2,6 +2,8 @@ idf_component_register(
     SRCS
         "role_display.c"
         "battery_monitor.c"
+        "display_adc.c"
+        "temperature_monitor.c"
         "mode_button.c"
         "display_st7789.c"
         "display_ui.c"

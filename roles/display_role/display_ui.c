@@ -891,6 +891,28 @@ static void update_measurements(
 }
 
 
+static void update_temperature(const display_ui_state_t *state)
+{
+    if (!state->temperature_valid) {
+        lv_label_set_text(ui_Temperature, "--.-°C");
+        return;
+    }
+
+    /* LVGL printf is intentionally kept integer-only in this project. */
+    int temp_tenths = (int)(state->temperature_c * 10.0f +
+                            (state->temperature_c >= 0.0f ? 0.5f : -0.5f));
+    const bool negative = temp_tenths < 0;
+    if (negative) {
+        temp_tenths = -temp_tenths;
+    }
+
+    lv_label_set_text_fmt(ui_Temperature, "%s%d.%d°C",
+                          negative ? "-" : "",
+                          temp_tenths / 10,
+                          temp_tenths % 10);
+}
+
+
 static void render_locked(
     const display_ui_state_t *state
 )
@@ -910,6 +932,7 @@ static void render_locked(
 
     update_signal(state);
     update_battery(state->battery_percent);
+    update_temperature(state);
     update_view(state->view);
     update_measurements(state);
 }
@@ -943,6 +966,8 @@ esp_err_t display_ui_init(void)
         .battery_percent = 0,
         .signal_percent = 0,
         .rssi_dbm = 0,
+        .temperature_valid = false,
+        .temperature_c = 0.0f,
         .l1_a = 0.0f,
         .l2_a = 0.0f,
         .l3_a = 0.0f,

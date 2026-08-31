@@ -17,6 +17,8 @@ typedef struct {
     int battery_percent;
     int signal_percent;
     int rssi_dbm;
+    bool temperature_valid;
+    float temperature_c;
     float l1_a;
     float l2_a;
     float l3_a;

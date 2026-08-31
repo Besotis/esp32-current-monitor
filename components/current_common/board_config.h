@@ -42,6 +42,7 @@
  *
  * The module has no exposed CS pin, so the driver uses CS=-1.
  */
+#define PIN_TEMPERATURE_ADC            1
 #define PIN_BATTERY_ADC                2
 #define PIN_MODE_BUTTON                3
 
@@ -64,6 +65,18 @@
 
 #define BATTERY_DIVIDER_RATIO          1.999f
 #define BATTERY_ADC_CHANNEL            ADC_CHANNEL_1
+
+/* 100k NTC on GPIO1 / ADC1_CH0.
+ * Wiring: 3V3 -> fixed resistor -> GPIO1 -> NTC -> GND.
+ * A 100 nF capacitor from GPIO1 to GND is recommended. */
+#define TEMPERATURE_ADC_CHANNEL        ADC_CHANNEL_0
+#define TEMPERATURE_ADC_SAMPLE_COUNT   96
+#define NTC_SUPPLY_VOLTAGE_V            3.300f
+#define NTC_FIXED_RESISTOR_OHM     100200.0f
+#define NTC_NOMINAL_RESISTANCE_OHM 100000.0f
+#define NTC_NOMINAL_TEMP_C              25.0f
+#define NTC_BETA_K                    3950.0f
+#define NTC_TEMP_OFFSET_C                0.0f
 
 /* SCT-013-030: 30 A / 1 V RMS. */
 #define SCT_CURRENT_PER_VOLT_A         30.0f

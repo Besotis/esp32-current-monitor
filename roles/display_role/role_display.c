@@ -9,6 +9,7 @@
 #include "espnow_comm.h"
 #include "mode_button.h"
 #include "protocol.h"
+#include "temperature_monitor.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -59,9 +60,9 @@ void role_display_start(void){
  ESP_ERROR_CHECK(display_st7789_early_backlight_off());
  ESP_LOGI(TAG,"Device role: B - DISPLAY");
  q=xQueueCreate(1,sizeof(rx_t));if(!q){ESP_LOGE(TAG,"Queue failed");return;}
- ESP_ERROR_CHECK(espnow_comm_init());ESP_ERROR_CHECK(battery_monitor_init());ESP_ERROR_CHECK(mode_button_init());ESP_ERROR_CHECK(display_ui_init());espnow_comm_set_receive_callback(on_packet);
- display_ui_state_t ui={.view=DISPLAY_VIEW_THREE_PHASE,.online=false,.battery_percent=0,.signal_percent=0,.rssi_dbm=0,.l1_a=0,.l2_a=0,.l3_a=0};
- int64_t boot=esp_timer_get_time(),last_rx=0,last_bat=0,last_draw=0,last_chart_sample=esp_timer_get_time();float fs=0;bool fs_init=false;
+ ESP_ERROR_CHECK(espnow_comm_init());ESP_ERROR_CHECK(battery_monitor_init());ESP_ERROR_CHECK(temperature_monitor_init());ESP_ERROR_CHECK(mode_button_init());ESP_ERROR_CHECK(display_ui_init());espnow_comm_set_receive_callback(on_packet);
+ display_ui_state_t ui={.view=DISPLAY_VIEW_THREE_PHASE,.online=false,.battery_percent=0,.signal_percent=0,.rssi_dbm=0,.temperature_valid=false,.temperature_c=0.0f,.l1_a=0,.l2_a=0,.l3_a=0};
+ int64_t boot=esp_timer_get_time(),last_rx=0,last_bat=0,last_temp=0,last_draw=0,last_chart_sample=esp_timer_get_time();float fs=0;bool fs_init=false;
  float chart_peak_l1=0.0f,chart_peak_l2=0.0f,chart_peak_l3=0.0f,chart_peak_total=0.0f;bool chart_peak_valid=false;
  while(1){
   rx_t x;
@@ -113,6 +114,7 @@ void role_display_start(void){
    ESP_LOGI(TAG,"Long press detected (deep sleep not implemented yet)");
   }
   if(last_bat==0||now-last_bat>=1000000LL){float v;int p;if(battery_monitor_read(&v,&p)==ESP_OK){ui.battery_percent=p;}last_bat=now;}
+  if(last_temp==0||now-last_temp>=3000000LL){float t;if(temperature_monitor_read(&t)==ESP_OK){ui.temperature_c=t;ui.temperature_valid=true;}else{ui.temperature_valid=false;}last_temp=now;}
 
   /* 180 points x 20 s = one hour of history.
    * Each chart point is the MAX observed during its 20 s bucket. */

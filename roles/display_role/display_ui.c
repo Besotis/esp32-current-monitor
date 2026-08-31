@@ -8,38 +8,183 @@
 #include "freertos/task.h"
 #include "ui/ui.h"
 
+#include <stdint.h>
 #include <stdio.h>
 
 static const char *TAG = "DISPLAY_UI";
+
+
+/* ============================================================
+ * BATTERY COLORS
+ *
+ * Keisk tik šitas HEX reikšmes.
+ *
+ * 0%   = visiškai išsikrovusi baterija
+ * 50%  = vidutinė baterija
+ * 100% = pilna baterija
+ *
+ * Tarp spalvų perėjimas atliekamas automatiškai.
+ * ============================================================ */
+
+#define BAT_COLOR_0_PCT      0xC50100
+#define BAT_COLOR_50_PCT     0xBCE200
+#define BAT_COLOR_100_PCT    0x00BF16
+
+
+/* ============================================================
+ * SIGNAL COLORS
+ *
+ * Keisk tik šitas HEX reikšmes.
+ *
+ * 1..20%   = 1 stulpelis
+ * 21..40%  = 2 stulpeliai
+ * 41..60%  = 3 stulpeliai
+ * 61..80%  = 4 stulpeliai
+ * 81..100% = 5 stulpeliai
+ *
+ * Antena gauna tokią pačią spalvą kaip aktyvūs stulpeliai.
+ *
+ * Neaktyvių stulpelių:
+ *   background = transparent
+ *   border     = paliekamas toks, kokį nustatei SquareLine.
+ * ============================================================ */
+
+#define SIGNAL_COLOR_20_PCT      0xD24A00
+#define SIGNAL_COLOR_40_PCT      0xD2B700
+#define SIGNAL_COLOR_60_PCT      0x9BD200
+#define SIGNAL_COLOR_80_PCT      0x61D200
+#define SIGNAL_COLOR_100_PCT     0x00D204
+
 
 static float kva(float current_a)
 {
     return NOMINAL_PHASE_VOLTAGE_V * current_a / 1000.0f;
 }
 
+
 static void format_uptime(unsigned seconds, char *out, size_t out_size)
 {
     const unsigned hours = seconds / 3600u;
     const unsigned minutes = (seconds / 60u) % 60u;
     const unsigned secs = seconds % 60u;
-    snprintf(out, out_size, "%02u:%02u:%02u", hours, minutes, secs);
+
+    snprintf(
+        out,
+        out_size,
+        "%02u:%02u:%02u",
+        hours,
+        minutes,
+        secs
+    );
 }
+
+
+/* ============================================================
+ * COLOR INTERPOLATION
+ *
+ * color1 -> color2
+ * t = 0   : color1
+ * t = 255 : color2
+ * ============================================================ */
+
+static lv_color_t interpolate_hex(
+    uint32_t color1,
+    uint32_t color2,
+    uint8_t t
+)
+{
+    const uint8_t r1 = (uint8_t)((color1 >> 16) & 0xFF);
+    const uint8_t g1 = (uint8_t)((color1 >> 8)  & 0xFF);
+    const uint8_t b1 = (uint8_t)( color1        & 0xFF);
+
+    const uint8_t r2 = (uint8_t)((color2 >> 16) & 0xFF);
+    const uint8_t g2 = (uint8_t)((color2 >> 8)  & 0xFF);
+    const uint8_t b2 = (uint8_t)( color2        & 0xFF);
+
+    const uint8_t r =
+        (uint8_t)((int)r1 + (((int)r2 - (int)r1) * t) / 255);
+
+    const uint8_t g =
+        (uint8_t)((int)g1 + (((int)g2 - (int)g1) * t) / 255);
+
+    const uint8_t b =
+        (uint8_t)((int)b1 + (((int)b2 - (int)b1) * t) / 255);
+
+    return lv_color_make(r, g, b);
+}
+
+
+/* ============================================================
+ * BATTERY COLOR
+ *
+ * 0..50%:
+ * BAT_COLOR_0_PCT -> BAT_COLOR_50_PCT
+ *
+ * 50..100%:
+ * BAT_COLOR_50_PCT -> BAT_COLOR_100_PCT
+ * ============================================================ */
 
 static lv_color_t battery_color_from_percent(int percent)
 {
-    if (percent < 0) percent = 0;
-    if (percent > 100) percent = 100;
-
-    if (percent >= 50) {
-        /* 50..100%: yellow -> green */
-        const uint8_t t = (uint8_t)(((percent - 50) * 255) / 50);
-        return lv_color_make((uint8_t)(255 - t), 255, 0);
+    if (percent < 0) {
+        percent = 0;
     }
 
-    /* 0..50%: red -> yellow */
-    const uint8_t t = (uint8_t)((percent * 255) / 50);
-    return lv_color_make(255, t, 0);
+    if (percent > 100) {
+        percent = 100;
+    }
+
+    if (percent >= 50) {
+
+        const uint8_t t =
+            (uint8_t)(((percent - 50) * 255) / 50);
+
+        return interpolate_hex(
+            BAT_COLOR_50_PCT,
+            BAT_COLOR_100_PCT,
+            t
+        );
+    }
+
+    const uint8_t t =
+        (uint8_t)((percent * 255) / 50);
+
+    return interpolate_hex(
+        BAT_COLOR_0_PCT,
+        BAT_COLOR_50_PCT,
+        t
+    );
 }
+
+
+/* ============================================================
+ * SIGNAL COLOR
+ *
+ * Kiekvienam stulpelių lygiui galima nurodyti atskirą
+ * tikslią HEX spalvą.
+ * ============================================================ */
+
+static lv_color_t signal_color_from_percent(int percent)
+{
+    if (percent <= 20) {
+        return lv_color_hex(SIGNAL_COLOR_20_PCT);
+    }
+
+    if (percent <= 40) {
+        return lv_color_hex(SIGNAL_COLOR_40_PCT);
+    }
+
+    if (percent <= 60) {
+        return lv_color_hex(SIGNAL_COLOR_60_PCT);
+    }
+
+    if (percent <= 80) {
+        return lv_color_hex(SIGNAL_COLOR_80_PCT);
+    }
+
+    return lv_color_hex(SIGNAL_COLOR_100_PCT);
+}
+
 
 static void set_hidden(lv_obj_t *obj, bool hidden)
 {
@@ -50,33 +195,179 @@ static void set_hidden(lv_obj_t *obj, bool hidden)
     }
 }
 
+
+/* ============================================================
+ * SIGNAL BAR BACKGROUND
+ *
+ * active = true:
+ *   spalvotas background
+ *
+ * active = false:
+ *   transparent background
+ *
+ * Border čia išvis neliečiamas.
+ * ============================================================ */
+
+static void set_signal_bar(
+    lv_obj_t *bar,
+    bool active,
+    lv_color_t color
+)
+{
+    /*
+     * Objektas visada turi būti matomas,
+     * nes norime matyti jo border.
+     */
+    set_hidden(bar, false);
+
+    if (active) {
+
+        lv_obj_set_style_bg_color(
+            bar,
+            color,
+            LV_PART_MAIN | LV_STATE_DEFAULT
+        );
+
+        lv_obj_set_style_bg_opa(
+            bar,
+            LV_OPA_COVER,
+            LV_PART_MAIN | LV_STATE_DEFAULT
+        );
+
+    } else {
+
+        /*
+         * Tik background transparent.
+         * Border property neliečiam.
+         */
+        lv_obj_set_style_bg_opa(
+            bar,
+            LV_OPA_TRANSP,
+            LV_PART_MAIN | LV_STATE_DEFAULT
+        );
+    }
+}
+
+
 static void update_signal(const display_ui_state_t *state)
 {
     set_hidden(ui_SignalLOST, state->online);
     set_hidden(ui_SignalAntena, !state->online);
 
+    lv_obj_t *bars[5] = {
+        ui_Signal20percent,
+        ui_Signal40percent,
+        ui_Signal60percent,
+        ui_Signal80percent,
+        ui_Signal100percent
+    };
+
+
+    /*
+     * OFFLINE:
+     *
+     * Antena paslėpta.
+     * N/C rodomas.
+     * Visi signal bars lieka su border,
+     * bet jų background transparent.
+     */
     if (!state->online) {
+
+        const lv_color_t dummy_color =
+            lv_color_hex(SIGNAL_COLOR_20_PCT);
+
+        for (int i = 0; i < 5; i++) {
+            set_signal_bar(
+                bars[i],
+                false,
+                dummy_color
+            );
+        }
+
         return;
     }
 
-    int p = state->signal_percent;
-    if (p < 1) p = 1;
-    if (p > 100) p = 100;
 
-    /* At least one bar while packets are being received. */
-    set_hidden(ui_Signal20percent, false);
-    set_hidden(ui_Signal40percent, p <= 20);
-    set_hidden(ui_Signal60percent, p <= 40);
-    set_hidden(ui_Signal80percent, p <= 60);
-    set_hidden(ui_Signal100percent, p <= 80);
+    int p = state->signal_percent;
+
+    if (p < 1) {
+        p = 1;
+    }
+
+    if (p > 100) {
+        p = 100;
+    }
+
+
+    const lv_color_t color =
+        signal_color_from_percent(p);
+
+
+    /*
+     * Signal percentage -> aktyvių stulpelių skaičius
+     *
+     * 1..20%   -> 1
+     * 21..40%  -> 2
+     * 41..60%  -> 3
+     * 61..80%  -> 4
+     * 81..100% -> 5
+     */
+
+    const int active_bars =
+        (p <= 20) ? 1 :
+        (p <= 40) ? 2 :
+        (p <= 60) ? 3 :
+        (p <= 80) ? 4 :
+                    5;
+
+
+    /*
+     * Nuspalvinam tik aktyvių barų background.
+     *
+     * Neaktyvūs lieka:
+     *
+     * background transparent
+     * border matomas
+     */
+
+    for (int i = 0; i < 5; i++) {
+
+        set_signal_bar(
+            bars[i],
+            i < active_bars,
+            color
+        );
+    }
+
+
+    /*
+     * Antena tokios pačios spalvos
+     * kaip aktyvūs stulpeliai.
+     */
+    lv_obj_set_style_text_color(
+        ui_SignalAntena,
+        color,
+        LV_PART_MAIN | LV_STATE_DEFAULT
+    );
 }
+
 
 static void update_battery(int percent)
 {
-    if (percent < 0) percent = 0;
-    if (percent > 100) percent = 100;
+    if (percent < 0) {
+        percent = 0;
+    }
 
-    lv_bar_set_value(ui_Bar1, percent, LV_ANIM_ON);
+    if (percent > 100) {
+        percent = 100;
+    }
+
+    lv_bar_set_value(
+        ui_Bar1,
+        percent,
+        LV_ANIM_ON
+    );
+
     lv_obj_set_style_bg_color(
         ui_Bar1,
         battery_color_from_percent(percent),
@@ -84,50 +375,205 @@ static void update_battery(int percent)
     );
 }
 
+
 static void update_mode(display_mode_t mode)
 {
-    const bool three_phase = (mode == DISPLAY_MODE_GRID);
+    const bool three_phase =
+        (mode == DISPLAY_MODE_GRID);
 
-    set_hidden(ui_ThreePhaseWINDOW, !three_phase);
-    set_hidden(ui_SinglePhaseWINDOW, three_phase);
+    set_hidden(
+        ui_ThreePhaseWINDOW,
+        !three_phase
+    );
 
-    /* Exact SquareLine-object behavior requested by the user. */
-    set_hidden(ui_ButtomINFOSinglePhase, !three_phase);
-    set_hidden(ui_BottomINFOFullLoad, three_phase);
+    set_hidden(
+        ui_SinglePhaseWINDOW,
+        three_phase
+    );
+
+    /*
+     * Exact SquareLine-object behavior requested.
+     */
+    set_hidden(
+        ui_ButtomINFOSinglePhase,
+        !three_phase
+    );
+
+    set_hidden(
+        ui_BottomINFOFullLoad,
+        three_phase
+    );
 }
 
-static void update_measurements(const display_ui_state_t *state)
+
+static void update_measurements(
+    const display_ui_state_t *state
+)
 {
     if (!state->online) {
-        lv_label_set_text(ui_L1AMPS, "L1 : --.-- A");
-        lv_label_set_text(ui_L2AMPS, "L2 : --.-- A");
-        lv_label_set_text(ui_L3AMPS, "L3 : --.-- A");
-        lv_label_set_text(ui_L1KVA, "--.-- KVA");
-        lv_label_set_text(ui_L2KVA, "--.-- KVA");
-        lv_label_set_text(ui_L3KVA, "--.-- KVA");
-        lv_label_set_text(ui_ThreePhasesFullAMPS, "--.-- A");
-        lv_label_set_text(ui_ThreePhasesFullKVA, "--.-- KVA");
+
+        lv_label_set_text(
+            ui_L1AMPS,
+            "L1 : --.-- A"
+        );
+
+        lv_label_set_text(
+            ui_L2AMPS,
+            "L2 : --.-- A"
+        );
+
+        lv_label_set_text(
+            ui_L3AMPS,
+            "L3 : --.-- A"
+        );
+
+        lv_label_set_text(
+            ui_L1KVA,
+            "--.-- KVA"
+        );
+
+        lv_label_set_text(
+            ui_L2KVA,
+            "--.-- KVA"
+        );
+
+        lv_label_set_text(
+            ui_L3KVA,
+            "--.-- KVA"
+        );
+
+        lv_label_set_text(
+            ui_ThreePhasesFullAMPS,
+            "--.-- A"
+        );
+
+        lv_label_set_text(
+            ui_ThreePhasesFullKVA,
+            "--.-- KVA"
+        );
+
         return;
     }
 
-    lv_label_set_text_fmt(ui_L1AMPS, "L1 : %.2f A", state->l1_a);
-    lv_label_set_text_fmt(ui_L2AMPS, "L2 : %.2f A", state->l2_a);
-    lv_label_set_text_fmt(ui_L3AMPS, "L3 : %.2f A", state->l3_a);
 
-    lv_label_set_text_fmt(ui_L1KVA, "%.2f KVA", kva(state->l1_a));
-    lv_label_set_text_fmt(ui_L2KVA, "%.2f KVA", kva(state->l2_a));
-    lv_label_set_text_fmt(ui_L3KVA, "%.2f KVA", kva(state->l3_a));
+    /*
+     * Do not use %f here.
+     *
+     * LVGL formatter can be built without floating-point
+     * formatting support, in which case "%.2f" may be
+     * rendered as just "f".
+     *
+     * Convert values to hundredths and format as integers.
+     */
 
-    const float total_a = state->l1_a + state->l2_a + state->l3_a;
-    lv_label_set_text_fmt(ui_ThreePhasesFullAMPS, "%.2f A", total_a);
-    lv_label_set_text_fmt(ui_ThreePhasesFullKVA, "%.2f KVA", kva(total_a));
+    const int l1_ca =
+        (int)(state->l1_a * 100.0f + 0.5f);
+
+    const int l2_ca =
+        (int)(state->l2_a * 100.0f + 0.5f);
+
+    const int l3_ca =
+        (int)(state->l3_a * 100.0f + 0.5f);
+
+
+    const int l1_ckva =
+        (int)(kva(state->l1_a) * 100.0f + 0.5f);
+
+    const int l2_ckva =
+        (int)(kva(state->l2_a) * 100.0f + 0.5f);
+
+    const int l3_ckva =
+        (int)(kva(state->l3_a) * 100.0f + 0.5f);
+
+
+    const float total_a =
+        state->l1_a +
+        state->l2_a +
+        state->l3_a;
+
+    const int total_ca =
+        (int)(total_a * 100.0f + 0.5f);
+
+    const int total_ckva =
+        (int)(kva(total_a) * 100.0f + 0.5f);
+
+
+    lv_label_set_text_fmt(
+        ui_L1AMPS,
+        "L1 : %d.%02d A",
+        l1_ca / 100,
+        l1_ca % 100
+    );
+
+    lv_label_set_text_fmt(
+        ui_L2AMPS,
+        "L2 : %d.%02d A",
+        l2_ca / 100,
+        l2_ca % 100
+    );
+
+    lv_label_set_text_fmt(
+        ui_L3AMPS,
+        "L3 : %d.%02d A",
+        l3_ca / 100,
+        l3_ca % 100
+    );
+
+
+    lv_label_set_text_fmt(
+        ui_L1KVA,
+        "%d.%02d kVA",
+        l1_ckva / 100,
+        l1_ckva % 100
+    );
+
+    lv_label_set_text_fmt(
+        ui_L2KVA,
+        "%d.%02d kVA",
+        l2_ckva / 100,
+        l2_ckva % 100
+    );
+
+    lv_label_set_text_fmt(
+        ui_L3KVA,
+        "%d.%02d kVA",
+        l3_ckva / 100,
+        l3_ckva % 100
+    );
+
+
+    lv_label_set_text_fmt(
+        ui_ThreePhasesFullAMPS,
+        "%d.%02d A",
+        total_ca / 100,
+        total_ca % 100
+    );
+
+    lv_label_set_text_fmt(
+        ui_ThreePhasesFullKVA,
+        "%d.%02d kVA",
+        total_ckva / 100,
+        total_ckva % 100
+    );
 }
 
-static void render_locked(const display_ui_state_t *state)
+
+static void render_locked(
+    const display_ui_state_t *state
+)
 {
     char uptime[20];
-    format_uptime(state->uptime_seconds, uptime, sizeof(uptime));
-    lv_label_set_text(ui_UPtime, uptime);
+
+    format_uptime(
+        state->uptime_seconds,
+        uptime,
+        sizeof(uptime)
+    );
+
+    lv_label_set_text(
+        ui_UPtime,
+        uptime
+    );
 
     update_signal(state);
     update_battery(state->battery_percent);
@@ -135,9 +581,14 @@ static void render_locked(const display_ui_state_t *state)
     update_measurements(state);
 }
 
+
 esp_err_t display_ui_init(void)
 {
-    ESP_RETURN_ON_ERROR(display_st7789_init(), TAG, "ST7789 init failed");
+    ESP_RETURN_ON_ERROR(
+        display_st7789_init(),
+        TAG,
+        "ST7789 init failed"
+    );
 
     if (!lvgl_port_lock(0)) {
         return ESP_ERR_TIMEOUT;
@@ -145,7 +596,12 @@ esp_err_t display_ui_init(void)
 
     ui_init();
 
-    /* Initial frame: ThreePhase window, offline, battery unknown/0%. */
+    /*
+     * Initial frame:
+     * ThreePhase window,
+     * offline,
+     * battery unknown / 0%.
+     */
     const display_ui_state_t initial = {
         .mode = DISPLAY_MODE_GRID,
         .online = false,
@@ -157,16 +613,33 @@ esp_err_t display_ui_init(void)
         .l2_a = 0.0f,
         .l3_a = 0.0f,
     };
+
     render_locked(&initial);
 
-    /* Force first complete LVGL frame while the panel/backlight are still hidden. */
+    /*
+     * Force first complete LVGL frame while
+     * panel/backlight are still hidden.
+     */
     lv_refr_now(NULL);
+
     lvgl_port_unlock();
 
-    vTaskDelay(pdMS_TO_TICKS(DISPLAY_STARTUP_BLANK_MS));
-    ESP_RETURN_ON_ERROR(display_st7789_panel_set_visible(true), TAG, "Panel ON failed");
+    vTaskDelay(
+        pdMS_TO_TICKS(
+            DISPLAY_STARTUP_BLANK_MS
+        )
+    );
+
     ESP_RETURN_ON_ERROR(
-        display_st7789_backlight_set(DISPLAY_STARTUP_BRIGHTNESS_PCT),
+        display_st7789_panel_set_visible(true),
+        TAG,
+        "Panel ON failed"
+    );
+
+    ESP_RETURN_ON_ERROR(
+        display_st7789_backlight_set(
+            DISPLAY_STARTUP_BRIGHTNESS_PCT
+        ),
         TAG,
         "Backlight ON failed"
     );
@@ -174,7 +647,10 @@ esp_err_t display_ui_init(void)
     return ESP_OK;
 }
 
-esp_err_t display_ui_render(const display_ui_state_t *state)
+
+esp_err_t display_ui_render(
+    const display_ui_state_t *state
+)
 {
     if (state == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -183,7 +659,10 @@ esp_err_t display_ui_render(const display_ui_state_t *state)
     if (!lvgl_port_lock(0)) {
         return ESP_ERR_TIMEOUT;
     }
+
     render_locked(state);
+
     lvgl_port_unlock();
+
     return ESP_OK;
 }

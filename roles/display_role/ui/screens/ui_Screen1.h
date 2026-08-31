@@ -54,17 +54,11 @@ extern lv_obj_t *ui_L1L2L3Chart_Xaxis;
 extern lv_obj_t *ui_L1L2L3Chart_Yaxis1;
 extern lv_obj_t *ui_L1L2L3Chart_Yaxis2;
 extern lv_obj_t *ui_lable0;
-extern lv_obj_t *ui_time20lable;
-extern lv_obj_t *ui_time40lable;
-extern lv_obj_t *ui_time60lable;
 extern lv_obj_t *ui_FullLoadChart;
 extern lv_obj_t *ui_FullLoadChart_Xaxis;
 extern lv_obj_t *ui_FullLoadChart_Yaxis1;
 extern lv_obj_t *ui_FullLoadChart_Yaxis2;
 extern lv_obj_t *ui_fulllable0;
-extern lv_obj_t *ui_fulltime20lable;
-extern lv_obj_t *ui_fulltime40lable;
-extern lv_obj_t *ui_fulltime60lable;
 // CUSTOM VARIABLES
 
 #ifdef __cplusplus

@@ -5,7 +5,7 @@
 
 #include "../ui.h"
 
-lv_obj_t *ui_Screen1 = NULL;lv_obj_t *ui_BorderFULL = NULL;lv_obj_t *ui_TOPsection = NULL;lv_obj_t *ui_Signal_container = NULL;lv_obj_t *ui_SignalLOST = NULL;lv_obj_t *ui_SignalAntena = NULL;lv_obj_t *ui_Signal20percent = NULL;lv_obj_t *ui_Signal40percent = NULL;lv_obj_t *ui_Signal60percent = NULL;lv_obj_t *ui_Signal80percent = NULL;lv_obj_t *ui_Signal100percent = NULL;lv_obj_t *ui_Battery_container = NULL;lv_obj_t *ui_BatteryBODY = NULL;lv_obj_t *ui_Bar1 = NULL;lv_obj_t *ui_BatteryTIP = NULL;lv_obj_t *ui_Temperature = NULL;lv_obj_t *ui_UPtime = NULL;lv_obj_t *ui_BOTTOMsection = NULL;lv_obj_t *ui_BottomINFONavigation = NULL;lv_obj_t *ui_Version = NULL;lv_obj_t *ui_MGtools = NULL;lv_obj_t *ui_ThreePhaseWINDOW = NULL;lv_obj_t *ui_ThreePhaseKVA = NULL;lv_obj_t *ui_L1KVA = NULL;lv_obj_t *ui_L2KVA = NULL;lv_obj_t *ui_L3KVA = NULL;lv_obj_t *ui_ThreePhaseAMPS = NULL;lv_obj_t *ui_L1AMPS = NULL;lv_obj_t *ui_L1lable = NULL;lv_obj_t *ui_L2AMPS = NULL;lv_obj_t *ui_L2lable = NULL;lv_obj_t *ui_L3AMPS = NULL;lv_obj_t *ui_L3lable = NULL;lv_obj_t *ui_SinglePhaseWINDOW = NULL;lv_obj_t *ui_ThreePhasesFullAMPS = NULL;lv_obj_t *ui_ThreePhasesFullKVA = NULL;lv_obj_t *ui_L1L2L3Chart = NULL;lv_obj_t *ui_L1L2L3Chart_Xaxis = NULL;lv_obj_t *ui_L1L2L3Chart_Yaxis1 = NULL;lv_obj_t *ui_L1L2L3Chart_Yaxis2 = NULL;lv_obj_t *ui_lable0 = NULL;lv_obj_t *ui_time20lable = NULL;lv_obj_t *ui_time40lable = NULL;lv_obj_t *ui_time60lable = NULL;lv_obj_t *ui_FullLoadChart = NULL;lv_obj_t *ui_FullLoadChart_Xaxis = NULL;lv_obj_t *ui_FullLoadChart_Yaxis1 = NULL;lv_obj_t *ui_FullLoadChart_Yaxis2 = NULL;lv_obj_t *ui_fulllable0 = NULL;lv_obj_t *ui_fulltime20lable = NULL;lv_obj_t *ui_fulltime40lable = NULL;lv_obj_t *ui_fulltime60lable = NULL;
+lv_obj_t *ui_Screen1 = NULL;lv_obj_t *ui_BorderFULL = NULL;lv_obj_t *ui_TOPsection = NULL;lv_obj_t *ui_Signal_container = NULL;lv_obj_t *ui_SignalLOST = NULL;lv_obj_t *ui_SignalAntena = NULL;lv_obj_t *ui_Signal20percent = NULL;lv_obj_t *ui_Signal40percent = NULL;lv_obj_t *ui_Signal60percent = NULL;lv_obj_t *ui_Signal80percent = NULL;lv_obj_t *ui_Signal100percent = NULL;lv_obj_t *ui_Battery_container = NULL;lv_obj_t *ui_BatteryBODY = NULL;lv_obj_t *ui_Bar1 = NULL;lv_obj_t *ui_BatteryTIP = NULL;lv_obj_t *ui_Temperature = NULL;lv_obj_t *ui_UPtime = NULL;lv_obj_t *ui_BOTTOMsection = NULL;lv_obj_t *ui_BottomINFONavigation = NULL;lv_obj_t *ui_Version = NULL;lv_obj_t *ui_MGtools = NULL;lv_obj_t *ui_ThreePhaseWINDOW = NULL;lv_obj_t *ui_ThreePhaseKVA = NULL;lv_obj_t *ui_L1KVA = NULL;lv_obj_t *ui_L2KVA = NULL;lv_obj_t *ui_L3KVA = NULL;lv_obj_t *ui_ThreePhaseAMPS = NULL;lv_obj_t *ui_L1AMPS = NULL;lv_obj_t *ui_L1lable = NULL;lv_obj_t *ui_L2AMPS = NULL;lv_obj_t *ui_L2lable = NULL;lv_obj_t *ui_L3AMPS = NULL;lv_obj_t *ui_L3lable = NULL;lv_obj_t *ui_SinglePhaseWINDOW = NULL;lv_obj_t *ui_ThreePhasesFullAMPS = NULL;lv_obj_t *ui_ThreePhasesFullKVA = NULL;lv_obj_t *ui_L1L2L3Chart = NULL;lv_obj_t *ui_L1L2L3Chart_Xaxis = NULL;lv_obj_t *ui_L1L2L3Chart_Yaxis1 = NULL;lv_obj_t *ui_L1L2L3Chart_Yaxis2 = NULL;lv_obj_t *ui_lable0 = NULL;lv_obj_t *ui_FullLoadChart = NULL;lv_obj_t *ui_FullLoadChart_Xaxis = NULL;lv_obj_t *ui_FullLoadChart_Yaxis1 = NULL;lv_obj_t *ui_FullLoadChart_Yaxis2 = NULL;lv_obj_t *ui_fulllable0 = NULL;
 // event funtions
 
 // build funtions
@@ -545,39 +545,6 @@ lv_obj_set_style_text_opa(ui_lable0, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_font(ui_lable0, &lv_font_montserrat_12, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_transform_rotation(ui_lable0, 450, LV_PART_MAIN| LV_STATE_DEFAULT);
 
-ui_time20lable = lv_label_create(ui_L1L2L3Chart);
-lv_obj_set_width( ui_time20lable, LV_SIZE_CONTENT);  /// 1
-lv_obj_set_height( ui_time20lable, LV_SIZE_CONTENT);   /// 1
-lv_obj_set_x( ui_time20lable, -37 );
-lv_obj_set_y( ui_time20lable, 10 );
-lv_obj_set_align( ui_time20lable, LV_ALIGN_BOTTOM_MID );
-lv_label_set_text(ui_time20lable,"20min");
-lv_obj_set_style_text_color(ui_time20lable, lv_color_hex(0xE2E2E2), LV_PART_MAIN | LV_STATE_DEFAULT );
-lv_obj_set_style_text_opa(ui_time20lable, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
-lv_obj_set_style_text_font(ui_time20lable, &lv_font_montserrat_12, LV_PART_MAIN| LV_STATE_DEFAULT);
-
-ui_time40lable = lv_label_create(ui_L1L2L3Chart);
-lv_obj_set_width( ui_time40lable, LV_SIZE_CONTENT);  /// 1
-lv_obj_set_height( ui_time40lable, LV_SIZE_CONTENT);   /// 1
-lv_obj_set_x( ui_time40lable, 36 );
-lv_obj_set_y( ui_time40lable, 10 );
-lv_obj_set_align( ui_time40lable, LV_ALIGN_BOTTOM_MID );
-lv_label_set_text(ui_time40lable,"40min");
-lv_obj_set_style_text_color(ui_time40lable, lv_color_hex(0xE2E2E2), LV_PART_MAIN | LV_STATE_DEFAULT );
-lv_obj_set_style_text_opa(ui_time40lable, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
-lv_obj_set_style_text_font(ui_time40lable, &lv_font_montserrat_12, LV_PART_MAIN| LV_STATE_DEFAULT);
-
-ui_time60lable = lv_label_create(ui_L1L2L3Chart);
-lv_obj_set_width( ui_time60lable, LV_SIZE_CONTENT);  /// 1
-lv_obj_set_height( ui_time60lable, LV_SIZE_CONTENT);   /// 1
-lv_obj_set_x( ui_time60lable, 8 );
-lv_obj_set_y( ui_time60lable, 10 );
-lv_obj_set_align( ui_time60lable, LV_ALIGN_BOTTOM_RIGHT );
-lv_label_set_text(ui_time60lable,"60");
-lv_obj_set_style_text_color(ui_time60lable, lv_color_hex(0xE2E2E2), LV_PART_MAIN | LV_STATE_DEFAULT );
-lv_obj_set_style_text_opa(ui_time60lable, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
-lv_obj_set_style_text_font(ui_time60lable, &lv_font_montserrat_12, LV_PART_MAIN| LV_STATE_DEFAULT);
-
 ui_FullLoadChart = lv_chart_create(ui_Screen1);
 lv_obj_set_width( ui_FullLoadChart, 236);
 lv_obj_set_height( ui_FullLoadChart, 166);
@@ -672,39 +639,6 @@ lv_obj_set_style_text_opa(ui_fulllable0, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_font(ui_fulllable0, &lv_font_montserrat_12, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_transform_rotation(ui_fulllable0, 450, LV_PART_MAIN| LV_STATE_DEFAULT);
 
-ui_fulltime20lable = lv_label_create(ui_FullLoadChart);
-lv_obj_set_width( ui_fulltime20lable, LV_SIZE_CONTENT);  /// 1
-lv_obj_set_height( ui_fulltime20lable, LV_SIZE_CONTENT);   /// 1
-lv_obj_set_x( ui_fulltime20lable, -37 );
-lv_obj_set_y( ui_fulltime20lable, 10 );
-lv_obj_set_align( ui_fulltime20lable, LV_ALIGN_BOTTOM_MID );
-lv_label_set_text(ui_fulltime20lable,"20min");
-lv_obj_set_style_text_color(ui_fulltime20lable, lv_color_hex(0xE2E2E2), LV_PART_MAIN | LV_STATE_DEFAULT );
-lv_obj_set_style_text_opa(ui_fulltime20lable, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
-lv_obj_set_style_text_font(ui_fulltime20lable, &lv_font_montserrat_12, LV_PART_MAIN| LV_STATE_DEFAULT);
-
-ui_fulltime40lable = lv_label_create(ui_FullLoadChart);
-lv_obj_set_width( ui_fulltime40lable, LV_SIZE_CONTENT);  /// 1
-lv_obj_set_height( ui_fulltime40lable, LV_SIZE_CONTENT);   /// 1
-lv_obj_set_x( ui_fulltime40lable, 36 );
-lv_obj_set_y( ui_fulltime40lable, 10 );
-lv_obj_set_align( ui_fulltime40lable, LV_ALIGN_BOTTOM_MID );
-lv_label_set_text(ui_fulltime40lable,"40min");
-lv_obj_set_style_text_color(ui_fulltime40lable, lv_color_hex(0xE2E2E2), LV_PART_MAIN | LV_STATE_DEFAULT );
-lv_obj_set_style_text_opa(ui_fulltime40lable, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
-lv_obj_set_style_text_font(ui_fulltime40lable, &lv_font_montserrat_12, LV_PART_MAIN| LV_STATE_DEFAULT);
-
-ui_fulltime60lable = lv_label_create(ui_FullLoadChart);
-lv_obj_set_width( ui_fulltime60lable, LV_SIZE_CONTENT);  /// 1
-lv_obj_set_height( ui_fulltime60lable, LV_SIZE_CONTENT);   /// 1
-lv_obj_set_x( ui_fulltime60lable, 8 );
-lv_obj_set_y( ui_fulltime60lable, 10 );
-lv_obj_set_align( ui_fulltime60lable, LV_ALIGN_BOTTOM_RIGHT );
-lv_label_set_text(ui_fulltime60lable,"60");
-lv_obj_set_style_text_color(ui_fulltime60lable, lv_color_hex(0xE2E2E2), LV_PART_MAIN | LV_STATE_DEFAULT );
-lv_obj_set_style_text_opa(ui_fulltime60lable, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
-lv_obj_set_style_text_font(ui_fulltime60lable, &lv_font_montserrat_12, LV_PART_MAIN| LV_STATE_DEFAULT);
-
 }
 
 void ui_Screen1_screen_destroy(void)
@@ -750,13 +684,7 @@ ui_ThreePhasesFullAMPS= NULL;
 ui_ThreePhasesFullKVA= NULL;
 ui_L1L2L3Chart= NULL;
 ui_lable0= NULL;
-ui_time20lable= NULL;
-ui_time40lable= NULL;
-ui_time60lable= NULL;
 ui_FullLoadChart= NULL;
 ui_fulllable0= NULL;
-ui_fulltime20lable= NULL;
-ui_fulltime40lable= NULL;
-ui_fulltime60lable= NULL;
 
 }

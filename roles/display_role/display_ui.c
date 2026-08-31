@@ -16,8 +16,13 @@ static const char *TAG = "DISPLAY_UI";
 #define CHART_POINT_COUNT          60
 #define CHART_PHASE_SCALE_X10      10
 #define CHART_TOTAL_SCALE_X10      10
-#define CHART_PHASE_MAX_X10       300   /* 30.0 A */
-#define CHART_TOTAL_MAX_X10       800   /* 80.0 A, matches SquareLine scale */
+#define CHART_DEFAULT_MAX_X10      50   /* Start at 0..5 A */
+#define CHART_VERTICAL_DIV_LINES    7   /* Keep the existing time grid */
+#define CHART_Y_LABEL_COUNT         4
+#define CHART_Y_LABEL_COLOR    0xE2E2E2
+#define CHART_Y_LABEL_X_PAD_PX      4
+#define CHART_Y_PLOT_TOP_PAD_PX      4
+#define CHART_Y_PLOT_BOTTOM_PAD_PX   12
 
 static lv_chart_series_t *s_chart_l1 = NULL;
 static lv_chart_series_t *s_chart_l2 = NULL;
@@ -30,6 +35,12 @@ static lv_coord_t s_chart_l1_points[CHART_POINT_COUNT];
 static lv_coord_t s_chart_l2_points[CHART_POINT_COUNT];
 static lv_coord_t s_chart_l3_points[CHART_POINT_COUNT];
 static lv_coord_t s_chart_total_points[CHART_POINT_COUNT];
+
+static lv_obj_t *s_phase_y_labels[CHART_Y_LABEL_COUNT];
+static lv_obj_t *s_total_y_labels[CHART_Y_LABEL_COUNT];
+static int s_phase_scale_max_a = -1;
+static int s_total_scale_max_a = -1;
+static int s_chart_sample_count = 0;
 
 
 /* ============================================================
@@ -211,32 +222,161 @@ static void chart_fill_none(lv_coord_t *points)
     }
 }
 
+typedef struct {
+    int max_a;
+    int div_lines;
+    int label_values[CHART_Y_LABEL_COUNT];
+    int label_count;
+} chart_scale_t;
+
+static chart_scale_t chart_scale_for_max_x10(lv_coord_t max_x10)
+{
+    /* The scale steps are intentionally fixed so the chart does not jump
+     * through arbitrary ranges and the grid always lands on useful values. */
+    if (max_x10 <= 50) {
+        return (chart_scale_t){5, 6, {1, 3, 5, 0}, 3};
+    }
+    if (max_x10 <= 100) {
+        return (chart_scale_t){10, 5, {5, 10, 0, 0}, 2};
+    }
+    if (max_x10 <= 200) {
+        return (chart_scale_t){20, 5, {10, 20, 0, 0}, 2};
+    }
+    if (max_x10 <= 300) {
+        return (chart_scale_t){30, 4, {10, 20, 30, 0}, 3};
+    }
+    if (max_x10 <= 500) {
+        return (chart_scale_t){50, 6, {10, 30, 50, 0}, 3};
+    }
+    if (max_x10 <= 800) {
+        return (chart_scale_t){80, 5, {20, 40, 60, 80}, 4};
+    }
+
+    /* Safety fallback for a possible 3 x 30 A full-load value above 80 A. */
+    return (chart_scale_t){100, 6, {20, 40, 60, 100}, 4};
+}
+
+static lv_coord_t chart_points_max(const lv_coord_t *a,
+                                   const lv_coord_t *b,
+                                   const lv_coord_t *c)
+{
+    lv_coord_t max_value = 0;
+
+    for (int i = 0; i < CHART_POINT_COUNT; ++i) {
+        const lv_coord_t values[3] = {
+            a != NULL ? a[i] : LV_CHART_POINT_NONE,
+            b != NULL ? b[i] : LV_CHART_POINT_NONE,
+            c != NULL ? c[i] : LV_CHART_POINT_NONE,
+        };
+
+        for (int j = 0; j < 3; ++j) {
+            if (values[j] != LV_CHART_POINT_NONE && values[j] > max_value) {
+                max_value = values[j];
+            }
+        }
+    }
+
+    return max_value;
+}
+
+static void chart_create_y_labels(lv_obj_t *chart, lv_obj_t **labels)
+{
+    for (int i = 0; i < CHART_Y_LABEL_COUNT; ++i) {
+        labels[i] = lv_label_create(chart);
+        lv_obj_set_size(labels[i], LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_style_text_color(labels[i], lv_color_hex(CHART_Y_LABEL_COLOR),
+                                    LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_opa(labels[i], LV_OPA_COVER,
+                                  LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(labels[i], &lv_font_montserrat_12,
+                                   LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_transform_rotation(labels[i], 900,
+                                            LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_flag(labels[i], LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static void chart_apply_scale(lv_obj_t *chart,
+                              lv_obj_t **labels,
+                              int *current_max_a,
+                              chart_scale_t scale)
+{
+    if (*current_max_a == scale.max_a) {
+        return;
+    }
+
+    *current_max_a = scale.max_a;
+
+    /* Chart values are stored in 0.1 A units. */
+    lv_chart_set_axis_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, scale.max_a * 10);
+    lv_chart_set_div_line_count(chart, scale.div_lines, CHART_VERTICAL_DIV_LINES);
+
+    for (int i = 0; i < CHART_Y_LABEL_COUNT; ++i) {
+        if (i >= scale.label_count) {
+            lv_obj_add_flag(labels[i], LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
+
+        const int value_a = scale.label_values[i];
+        lv_label_set_text_fmt(labels[i], "%dA", value_a);
+
+        /* Match the label center to the real chart plot area.
+         *
+         * The chart object is 236 x 166 px, but the horizontal grid does not
+         * start at object Y=0 or end at Y=165.  On the physical display the
+         * top and bottom grid lines are both inset by 8 px.  For a 166 px
+         * chart this gives a real Y plot span of 8..157 (149 px).
+         *
+         * Keeping these as explicit plot paddings makes every dynamic scale
+         * (5/10/20/30/50/80 A) use the same calibrated geometry.  The
+         * existing SquareLine "0" label is intentionally left untouched. */
+        lv_obj_set_align(labels[i], LV_ALIGN_TOP_LEFT);
+        lv_obj_update_layout(chart);
+        lv_obj_update_layout(labels[i]);
+
+        const int32_t chart_h = lv_obj_get_height(chart);
+        const int32_t plot_top = CHART_Y_PLOT_TOP_PAD_PX;
+        const int32_t plot_bottom = chart_h > 0
+            ? chart_h - 1 - CHART_Y_PLOT_BOTTOM_PAD_PX
+            : 0;
+        const int32_t plot_h = plot_bottom > plot_top
+            ? plot_bottom - plot_top
+            : 0;
+        const int32_t label_h = lv_obj_get_height(labels[i]);
+        const int32_t line_y = plot_top +
+            (int32_t)(((int64_t)(scale.max_a - value_a) * plot_h
+                       + (scale.max_a / 2)) / scale.max_a);
+
+        lv_obj_set_x(labels[i], CHART_Y_LABEL_X_PAD_PX);
+        lv_obj_set_y(labels[i], line_y - (label_h / 2));
+        lv_obj_remove_flag(labels[i], LV_OBJ_FLAG_HIDDEN);
+    }
+
+    lv_chart_refresh(chart);
+}
+
+static void chart_update_dynamic_scales(void)
+{
+    const lv_coord_t phase_max = chart_points_max(
+        s_chart_l1_points, s_chart_l2_points, s_chart_l3_points);
+    const lv_coord_t total_max = chart_points_max(
+        s_chart_total_points, NULL, NULL);
+
+    chart_apply_scale(ui_L1L2L3Chart, s_phase_y_labels, &s_phase_scale_max_a,
+                      chart_scale_for_max_x10(phase_max));
+    chart_apply_scale(ui_FullLoadChart, s_total_y_labels, &s_total_scale_max_a,
+                      chart_scale_for_max_x10(total_max));
+}
+
 static void chart_init_runtime(void)
 {
-    /* Keep the visual 0..30 A and 0..80 A scales designed in SquareLine,
-     * but store values in 0.1 A units so the lines retain useful resolution. */
     lv_chart_set_axis_range(
-        ui_L1L2L3Chart,
-        LV_CHART_AXIS_PRIMARY_Y,
-        0,
-        CHART_PHASE_MAX_X10
-    );
-
+        ui_L1L2L3Chart, LV_CHART_AXIS_PRIMARY_Y, 0, CHART_DEFAULT_MAX_X10);
     lv_chart_set_axis_range(
-        ui_FullLoadChart,
-        LV_CHART_AXIS_PRIMARY_Y,
-        0,
-        CHART_TOTAL_MAX_X10
-    );
+        ui_FullLoadChart, LV_CHART_AXIS_PRIMARY_Y, 0, CHART_DEFAULT_MAX_X10);
 
-    lv_chart_set_update_mode(
-        ui_L1L2L3Chart,
-        LV_CHART_UPDATE_MODE_SHIFT
-    );
-    lv_chart_set_update_mode(
-        ui_FullLoadChart,
-        LV_CHART_UPDATE_MODE_SHIFT
-    );
+    lv_chart_set_update_mode(ui_L1L2L3Chart, LV_CHART_UPDATE_MODE_SHIFT);
+    lv_chart_set_update_mode(ui_FullLoadChart, LV_CHART_UPDATE_MODE_SHIFT);
 
     s_chart_l1 = lv_chart_get_series_next(ui_L1L2L3Chart, NULL);
     s_chart_l2 = lv_chart_get_series_next(ui_L1L2L3Chart, s_chart_l1);
@@ -249,28 +389,21 @@ static void chart_init_runtime(void)
     chart_fill_none(s_chart_total_points);
 
     if (s_chart_l1 != NULL) {
-        lv_chart_set_series_ext_y_array(
-            ui_L1L2L3Chart, s_chart_l1, s_chart_l1_points
-        );
+        lv_chart_set_series_ext_y_array(ui_L1L2L3Chart, s_chart_l1, s_chart_l1_points);
     }
     if (s_chart_l2 != NULL) {
-        lv_chart_set_series_ext_y_array(
-            ui_L1L2L3Chart, s_chart_l2, s_chart_l2_points
-        );
+        lv_chart_set_series_ext_y_array(ui_L1L2L3Chart, s_chart_l2, s_chart_l2_points);
     }
     if (s_chart_l3 != NULL) {
-        lv_chart_set_series_ext_y_array(
-            ui_L1L2L3Chart, s_chart_l3, s_chart_l3_points
-        );
+        lv_chart_set_series_ext_y_array(ui_L1L2L3Chart, s_chart_l3, s_chart_l3_points);
     }
     if (s_chart_total != NULL) {
-        lv_chart_set_series_ext_y_array(
-            ui_FullLoadChart, s_chart_total, s_chart_total_points
-        );
+        lv_chart_set_series_ext_y_array(ui_FullLoadChart, s_chart_total, s_chart_total_points);
     }
 
-    lv_chart_refresh(ui_L1L2L3Chart);
-    lv_chart_refresh(ui_FullLoadChart);
+    chart_create_y_labels(ui_L1L2L3Chart, s_phase_y_labels);
+    chart_create_y_labels(ui_FullLoadChart, s_total_y_labels);
+    chart_update_dynamic_scales();
 }
 
 static lv_coord_t chart_current_x10(float amps)
@@ -763,36 +896,38 @@ esp_err_t display_ui_chart_add_sample(const display_ui_state_t *state)
         return ESP_ERR_INVALID_STATE;
     }
 
+    /* Fill from left to right while the first 60 minutes are collected.
+     * Only after the history is full do we shift the oldest sample out. */
+    int index;
+    if (s_chart_sample_count < CHART_POINT_COUNT) {
+        index = s_chart_sample_count++;
+    } else {
+        for (int i = 1; i < CHART_POINT_COUNT; ++i) {
+            s_chart_l1_points[i - 1] = s_chart_l1_points[i];
+            s_chart_l2_points[i - 1] = s_chart_l2_points[i];
+            s_chart_l3_points[i - 1] = s_chart_l3_points[i];
+            s_chart_total_points[i - 1] = s_chart_total_points[i];
+        }
+        index = CHART_POINT_COUNT - 1;
+    }
+
     if (state->online) {
         const float total_a = state->l1_a + state->l2_a + state->l3_a;
-
-        lv_chart_set_next_value(
-            ui_L1L2L3Chart, s_chart_l1, chart_current_x10(state->l1_a)
-        );
-        lv_chart_set_next_value(
-            ui_L1L2L3Chart, s_chart_l2, chart_current_x10(state->l2_a)
-        );
-        lv_chart_set_next_value(
-            ui_L1L2L3Chart, s_chart_l3, chart_current_x10(state->l3_a)
-        );
-        lv_chart_set_next_value(
-            ui_FullLoadChart, s_chart_total, chart_current_x10(total_a)
-        );
+        s_chart_l1_points[index] = chart_current_x10(state->l1_a);
+        s_chart_l2_points[index] = chart_current_x10(state->l2_a);
+        s_chart_l3_points[index] = chart_current_x10(state->l3_a);
+        s_chart_total_points[index] = chart_current_x10(total_a);
     } else {
         /* A missing minute is a gap, not a fake 0 A measurement. */
-        lv_chart_set_next_value(
-            ui_L1L2L3Chart, s_chart_l1, LV_CHART_POINT_NONE
-        );
-        lv_chart_set_next_value(
-            ui_L1L2L3Chart, s_chart_l2, LV_CHART_POINT_NONE
-        );
-        lv_chart_set_next_value(
-            ui_L1L2L3Chart, s_chart_l3, LV_CHART_POINT_NONE
-        );
-        lv_chart_set_next_value(
-            ui_FullLoadChart, s_chart_total, LV_CHART_POINT_NONE
-        );
+        s_chart_l1_points[index] = LV_CHART_POINT_NONE;
+        s_chart_l2_points[index] = LV_CHART_POINT_NONE;
+        s_chart_l3_points[index] = LV_CHART_POINT_NONE;
+        s_chart_total_points[index] = LV_CHART_POINT_NONE;
     }
+
+    chart_update_dynamic_scales();
+    lv_chart_refresh(ui_L1L2L3Chart);
+    lv_chart_refresh(ui_FullLoadChart);
 
     lvgl_port_unlock();
     return ESP_OK;

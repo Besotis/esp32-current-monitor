@@ -2655,7 +2655,7 @@
                       {
                         "nid": 1030,
                         "strtype": "LABEL/Text",
-                        "strval": "Short press - next, Duble press - Chart\\n              Long press - Deepsleep",
+                        "strval": "Short press - next, Double press - Chart\\n              Long press - Deepsleep",
                         "InheritedType": 10
                       },
                       {
@@ -9995,7 +9995,7 @@
     "separate_screen_save": false,
     "hierarchy_state_save": false,
     "reverse_event_order": false,
-    "backup_cnt": 73,
+    "backup_cnt": 74,
     "autosave_cnt": 0,
     "group_color_cnt": 0,
     "imagebytearrayprefix": null,

@@ -225,7 +225,7 @@ ui_BottomINFONavigation = lv_label_create(ui_BOTTOMsection);
 lv_obj_set_width( ui_BottomINFONavigation, LV_SIZE_CONTENT);  /// 1
 lv_obj_set_height( ui_BottomINFONavigation, LV_SIZE_CONTENT);   /// 1
 lv_obj_set_align( ui_BottomINFONavigation, LV_ALIGN_CENTER );
-lv_label_set_text(ui_BottomINFONavigation,"Short press - next, Duble press - Chart\n              Long press - Deepsleep");
+lv_label_set_text(ui_BottomINFONavigation,"Short press - next, Double press - Chart\n              Long press - Deepsleep");
 lv_obj_set_style_text_color(ui_BottomINFONavigation, lv_color_hex(0x808080), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_BottomINFONavigation, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_align(ui_BottomINFONavigation, LV_TEXT_ALIGN_AUTO, LV_PART_MAIN| LV_STATE_DEFAULT);

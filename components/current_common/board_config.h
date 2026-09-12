@@ -10,7 +10,7 @@
  * A / SENSOR (final calibrated wiring):
  *   L1 -> D2 / GPIO3 / ADC1_CH2
  *   L2 -> D3 / GPIO4 / ADC1_CH3
- *   L3 -> D8 / GPIO7 / ADC1_CH6
+ *   L3 -> D0 / GPIO1 / ADC1_CH0
  */
 #define SCT_L1_ENABLED                 1
 #define SCT_L2_ENABLED                 1
@@ -18,11 +18,19 @@
 
 #define PIN_SCT_L1_ADC                 3
 #define PIN_SCT_L2_ADC                 4
-#define PIN_SCT_L3_ADC                 7
+#define PIN_SCT_L3_ADC                 1
 
 #define SCT_L1_ADC_CHANNEL             ADC_CHANNEL_2
 #define SCT_L2_ADC_CHANNEL             ADC_CHANNEL_3
-#define SCT_L3_ADC_CHANNEL             ADC_CHANNEL_6
+#define SCT_L3_ADC_CHANNEL             ADC_CHANNEL_0
+
+/* SENSOR status LEDs (A board only).
+ * Wiring: GPIO -> 220 ohm -> LED anode, LED cathode -> GND.
+ * Green: firmware heartbeat. Yellow: successful ESP-NOW TX / valid RX activity. */
+#define PIN_SENSOR_LED_GREEN           5
+#define PIN_SENSOR_LED_YELLOW          6
+#define SENSOR_LED_HEARTBEAT_MS         500
+#define SENSOR_LED_ESPNOW_PULSE_MS       80
 
 /*
  * B / DISPLAY board
@@ -82,7 +90,7 @@
 #define SCT_CURRENT_PER_VOLT_A         30.0f
 #define SCT_L1_CALIBRATION_FACTOR      0.990f
 #define SCT_L2_CALIBRATION_FACTOR      0.990f
-#define SCT_L3_CALIBRATION_FACTOR      0.990f
+#define SCT_L3_CALIBRATION_FACTOR      0.9935f
 
 #define SCT_L1_NOISE_RMS_V             0.00403f
 #define SCT_L2_NOISE_RMS_V             0.00413f

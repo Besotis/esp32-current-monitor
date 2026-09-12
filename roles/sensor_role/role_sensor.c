@@ -6,6 +6,7 @@
 #include "current_sensor.h"
 #include "espnow_comm.h"
 #include "protocol.h"
+#include "sensor_status_led.h"
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -22,8 +23,10 @@ void role_sensor_start(void)
     ESP_LOGI(TAG, "Device role: A - 3-PHASE SENSOR");
     ESP_LOGI(TAG, "=================================");
 
+    ESP_ERROR_CHECK(sensor_status_led_init());
     ESP_ERROR_CHECK(current_sensor_init());
     ESP_ERROR_CHECK(espnow_comm_init());
+    espnow_comm_set_activity_callback(sensor_status_led_espnow_activity);
     ESP_ERROR_CHECK(espnow_add_peer(DEVICE_B_MAC));
 
     const uint32_t session_id =

@@ -13,6 +13,7 @@
 static const char *TAG = "ESPNOW";
 
 static espnow_receive_callback_t receive_callback = NULL;
+static espnow_activity_callback_t activity_callback = NULL;
 
 static void on_send(
     const wifi_tx_info_t *tx_info,
@@ -23,6 +24,11 @@ static void on_send(
 
     if (status != ESP_NOW_SEND_SUCCESS) {
         ESP_LOGW(TAG, "Unicast delivery failed");
+        return;
+    }
+
+    if (activity_callback != NULL) {
+        activity_callback();
     }
 }
 
@@ -50,6 +56,10 @@ static void on_receive(
 
     if (info->rx_ctrl != NULL) {
         rssi_dbm = info->rx_ctrl->rssi;
+    }
+
+    if (activity_callback != NULL) {
+        activity_callback();
     }
 
     if (receive_callback != NULL) {
@@ -195,6 +205,13 @@ void espnow_comm_set_receive_callback(
 )
 {
     receive_callback = callback;
+}
+
+void espnow_comm_set_activity_callback(
+    espnow_activity_callback_t callback
+)
+{
+    activity_callback = callback;
 }
 
 esp_err_t espnow_add_peer(

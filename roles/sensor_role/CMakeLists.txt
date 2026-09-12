@@ -2,9 +2,12 @@ idf_component_register(
     SRCS
         "role_sensor.c"
         "current_sensor.c"
+        "sensor_status_led.c"
     INCLUDE_DIRS
         "."
     REQUIRES
         current_common
         esp_adc
+    PRIV_REQUIRES
+        esp_driver_gpio
 )

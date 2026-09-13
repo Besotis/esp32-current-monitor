@@ -6,6 +6,7 @@
 #include "esp_lvgl_port.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_sleep.h"
 #include "ui/ui.h"
 
 #include <stdint.h>
@@ -51,6 +52,72 @@ static int s_chart_time_window_min = -1;
 static int s_phase_scale_max_a = -1;
 static int s_total_scale_max_a = -1;
 static int s_chart_sample_count = 0;
+
+static lv_obj_t *s_transition_overlay = NULL;
+
+static esp_err_t transition_show_locked(const char *text)
+{
+    if (s_transition_overlay != NULL) {
+        lv_obj_delete(s_transition_overlay);
+        s_transition_overlay = NULL;
+    }
+
+    s_transition_overlay = lv_obj_create(lv_layer_top());
+    if (s_transition_overlay == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    lv_obj_remove_flag(s_transition_overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(s_transition_overlay, LV_PCT(100), LV_PCT(100));
+    lv_obj_center(s_transition_overlay);
+    /* Match the SquareLine full-screen style exactly. */
+    lv_obj_set_style_radius(s_transition_overlay, 10, 0);
+    lv_obj_set_style_border_color(s_transition_overlay, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_border_opa(s_transition_overlay, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(s_transition_overlay, 2, 0);
+    lv_obj_set_style_border_side(s_transition_overlay, LV_BORDER_SIDE_FULL, 0);
+    lv_obj_set_style_pad_all(s_transition_overlay, 0, 0);
+    lv_obj_set_style_bg_color(s_transition_overlay, lv_color_hex(0x414141), 0);
+    lv_obj_set_style_bg_opa(s_transition_overlay, LV_OPA_COVER, 0);
+
+    lv_obj_t *label = lv_label_create(s_transition_overlay);
+    if (label == NULL) {
+        lv_obj_delete(s_transition_overlay);
+        s_transition_overlay = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+    lv_label_set_text(label, text != NULL ? text : "");
+    lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_20, 0);
+    lv_obj_center(label);
+
+    lv_refr_now(NULL);
+    return ESP_OK;
+}
+
+esp_err_t display_ui_show_transition(const char *text)
+{
+    if (!lvgl_port_lock(0)) {
+        return ESP_ERR_TIMEOUT;
+    }
+    const esp_err_t err = transition_show_locked(text);
+    lvgl_port_unlock();
+    return err;
+}
+
+esp_err_t display_ui_hide_transition(void)
+{
+    if (!lvgl_port_lock(0)) {
+        return ESP_ERR_TIMEOUT;
+    }
+    if (s_transition_overlay != NULL) {
+        lv_obj_delete(s_transition_overlay);
+        s_transition_overlay = NULL;
+        lv_refr_now(NULL);
+    }
+    lvgl_port_unlock();
+    return ESP_OK;
+}
 
 
 /* ============================================================
@@ -983,11 +1050,18 @@ esp_err_t display_ui_init(void)
 
     lvgl_port_unlock();
 
-    vTaskDelay(
-        pdMS_TO_TICKS(
-            DISPLAY_STARTUP_BLANK_MS
-        )
-    );
+    const bool waking_from_deep_sleep =
+        (esp_sleep_get_wakeup_causes() & (1UL << ESP_SLEEP_WAKEUP_EXT1)) != 0;
+
+    if (waking_from_deep_sleep) {
+        ESP_RETURN_ON_ERROR(
+            display_ui_show_transition("Let\'s Rock!!"),
+            TAG,
+            "Wake transition screen failed"
+        );
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(DISPLAY_STARTUP_BLANK_MS));
 
     ESP_RETURN_ON_ERROR(
         display_st7789_panel_set_visible(true),
@@ -995,13 +1069,30 @@ esp_err_t display_ui_init(void)
         "Panel ON failed"
     );
 
-    ESP_RETURN_ON_ERROR(
-        display_st7789_backlight_set(
-            DISPLAY_STARTUP_BRIGHTNESS_PCT
-        ),
-        TAG,
-        "Backlight ON failed"
-    );
+    if (waking_from_deep_sleep) {
+        ESP_RETURN_ON_ERROR(
+            display_st7789_backlight_fade_to(
+                DISPLAY_STARTUP_BRIGHTNESS_PCT,
+                DISPLAY_WAKE_FADE_MS
+            ),
+            TAG,
+            "Wake fade-in failed"
+        );
+        ESP_RETURN_ON_ERROR(
+            display_ui_hide_transition(),
+            TAG,
+            "Wake transition hide failed"
+        );
+    } else {
+        ESP_RETURN_ON_ERROR(
+            display_st7789_backlight_fade_to(
+                DISPLAY_STARTUP_BRIGHTNESS_PCT,
+                DISPLAY_STARTUP_FADE_MS
+            ),
+            TAG,
+            "Startup fade-in failed"
+        );
+    }
 
     return ESP_OK;
 }

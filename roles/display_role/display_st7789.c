@@ -22,6 +22,7 @@ static const char *TAG = "ST7789";
 static esp_lcd_panel_io_handle_t s_io = NULL;
 static esp_lcd_panel_handle_t s_panel = NULL;
 static bool s_backlight_pwm_ready = false;
+static int s_backlight_percent = 0;
 
 #define DISPLAY_SPI_HOST     SPI2_HOST
 
@@ -180,7 +181,7 @@ esp_err_t display_st7789_init(void)
     return ESP_OK;
 }
 
-esp_err_t display_st7789_backlight_set(int percent)
+static esp_err_t backlight_set_raw(int percent)
 {
     if (!s_backlight_pwm_ready) {
         return ESP_ERR_INVALID_STATE;
@@ -192,8 +193,46 @@ esp_err_t display_st7789_backlight_set(int percent)
     const uint32_t duty = (BL_PWM_MAX_DUTY * (uint32_t)percent + 50U) / 100U;
     ESP_RETURN_ON_ERROR(ledc_set_duty(BL_PWM_MODE, BL_PWM_CHANNEL, duty), TAG, "Set BL duty failed");
     ESP_RETURN_ON_ERROR(ledc_update_duty(BL_PWM_MODE, BL_PWM_CHANNEL), TAG, "Update BL duty failed");
+    s_backlight_percent = percent;
+    return ESP_OK;
+}
 
-    ESP_LOGI(TAG, "Backlight: %d%% (duty=%" PRIu32 ")", percent, duty);
+esp_err_t display_st7789_backlight_set(int percent)
+{
+    ESP_RETURN_ON_ERROR(backlight_set_raw(percent), TAG, "Backlight set failed");
+    ESP_LOGI(TAG, "Backlight: %d%%", s_backlight_percent);
+    return ESP_OK;
+}
+
+esp_err_t display_st7789_backlight_fade_to(int percent, uint32_t duration_ms)
+{
+    if (!s_backlight_pwm_ready) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+
+    const int start = s_backlight_percent;
+    const int delta = percent - start;
+
+    if (duration_ms == 0 || delta == 0) {
+        return display_st7789_backlight_set(percent);
+    }
+
+    /* 20 ms updates are smooth enough for the backlight and keep the fade
+     * independent of LVGL rendering. */
+    uint32_t steps = duration_ms / 20U;
+    if (steps < 1U) steps = 1U;
+
+    for (uint32_t i = 1; i <= steps; ++i) {
+        const int value = start + (int)((delta * (int32_t)i) / (int32_t)steps);
+        ESP_RETURN_ON_ERROR(backlight_set_raw(value), TAG, "Backlight fade failed");
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+
+    ESP_RETURN_ON_ERROR(backlight_set_raw(percent), TAG, "Backlight fade final set failed");
+    ESP_LOGI(TAG, "Backlight fade: %d%% -> %d%% in %" PRIu32 " ms", start, percent, duration_ms);
     return ESP_OK;
 }
 

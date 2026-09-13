@@ -162,6 +162,12 @@ void role_display_start(void){
   }else if(button_event == MODE_BUTTON_EVENT_LONG){
    ESP_LOGI(TAG,"Long press 3.0 s: preparing deep sleep");
 
+   /* Show a clean transition while the panel is still fully alive, then fade
+    * only the backlight.  After the fade the existing panel sleep sequence
+    * takes over and finally holds BLK physically LOW for deep sleep. */
+   ESP_ERROR_CHECK(display_ui_show_transition("Lights Out... zZz"));
+   ESP_ERROR_CHECK(display_st7789_backlight_fade_to(0, DISPLAY_SLEEP_FADE_MS));
+
    /* The LONG event is generated while the button is still held LOW.  Wait
     * for release before arming an active-LOW wake source; otherwise the same
     * press could wake the ESP32 immediately after entering deep sleep. */

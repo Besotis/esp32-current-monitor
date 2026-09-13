@@ -26,4 +26,6 @@ typedef struct {
 
 esp_err_t display_ui_init(void);
 esp_err_t display_ui_render(const display_ui_state_t *state);
+esp_err_t display_ui_show_transition(const char *text);
+esp_err_t display_ui_hide_transition(void);
 esp_err_t display_ui_chart_add_sample(float l1_a, float l2_a, float l3_a, float total_a, bool valid);

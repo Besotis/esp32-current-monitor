@@ -27,8 +27,8 @@
 /* SENSOR status LEDs (A board only).
  * Wiring: GPIO -> 220 ohm -> LED anode, LED cathode -> GND.
  * Green: firmware heartbeat. Yellow: successful ESP-NOW TX / valid RX activity. */
-#define PIN_SENSOR_LED_GREEN           5
-#define PIN_SENSOR_LED_YELLOW          6
+#define PIN_SENSOR_LED_GREEN           6
+#define PIN_SENSOR_LED_YELLOW          5
 #define SENSOR_LED_HEARTBEAT_MS         500
 #define SENSOR_LED_ESPNOW_PULSE_MS       80
 
@@ -64,7 +64,7 @@
 #define DISPLAY_SPI_MODE               3
 #define DISPLAY_WIDTH                  240
 #define DISPLAY_HEIGHT                 240
-#define DISPLAY_X_GAP                  80
+#define DISPLAY_X_GAP                  0
 #define DISPLAY_Y_GAP                  0
 #define DISPLAY_LVGL_BUFFER_LINES      40
 #define DISPLAY_STARTUP_BRIGHTNESS_PCT 50
@@ -101,6 +101,8 @@
 
 /* ESP-NOW */
 #define ESPNOW_WIFI_CHANNEL            1
+#define ESPNOW_HANDSHAKE_INTERVAL_MS    500
+#define ESPNOW_LINK_LOSS_FAIL_COUNT       8
 
 static const uint8_t DEVICE_A_MAC[6] = {
     0xAC, 0xA7, 0x04, 0x2C, 0x59, 0x64

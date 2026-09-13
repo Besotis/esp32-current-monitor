@@ -13,7 +13,9 @@
 static const char *TAG = "ESPNOW";
 
 static espnow_receive_callback_t receive_callback = NULL;
+static espnow_control_callback_t control_callback = NULL;
 static espnow_activity_callback_t activity_callback = NULL;
+static espnow_send_result_callback_t send_result_callback = NULL;
 
 static void on_send(
     const wifi_tx_info_t *tx_info,
@@ -22,7 +24,13 @@ static void on_send(
 {
     (void)tx_info;
 
-    if (status != ESP_NOW_SEND_SUCCESS) {
+    const bool success = (status == ESP_NOW_SEND_SUCCESS);
+
+    if (send_result_callback != NULL) {
+        send_result_callback(success);
+    }
+
+    if (!success) {
         ESP_LOGW(TAG, "Unicast delivery failed");
         return;
     }
@@ -38,36 +46,50 @@ static void on_receive(
     int len
 )
 {
-    if (info == NULL ||
-        data == NULL ||
-        len != (int)sizeof(current_data_packet_t)) {
-        return;
-    }
-
-    current_data_packet_t packet;
-    memcpy(&packet, data, sizeof(packet));
-
-    if (packet.magic != CURRENT_PROTOCOL_MAGIC ||
-        packet.version != CURRENT_PROTOCOL_VERSION) {
+    if (info == NULL || data == NULL) {
         return;
     }
 
     int8_t rssi_dbm = -127;
-
     if (info->rx_ctrl != NULL) {
         rssi_dbm = info->rx_ctrl->rssi;
     }
 
-    if (activity_callback != NULL) {
-        activity_callback();
+    if (len == (int)sizeof(current_data_packet_t)) {
+        current_data_packet_t packet;
+        memcpy(&packet, data, sizeof(packet));
+
+        if (packet.magic != CURRENT_PROTOCOL_MAGIC ||
+            packet.version != CURRENT_PROTOCOL_VERSION) {
+            return;
+        }
+
+        if (activity_callback != NULL) {
+            activity_callback();
+        }
+        if (receive_callback != NULL) {
+            receive_callback(&packet, info->src_addr, rssi_dbm);
+        }
+        return;
     }
 
-    if (receive_callback != NULL) {
-        receive_callback(
-            &packet,
-            info->src_addr,
-            rssi_dbm
-        );
+    if (len == (int)sizeof(espnow_control_packet_t)) {
+        espnow_control_packet_t packet;
+        memcpy(&packet, data, sizeof(packet));
+
+        if (packet.magic != ESPNOW_CONTROL_MAGIC ||
+            packet.version != ESPNOW_CONTROL_VERSION ||
+            (packet.type != ESPNOW_CONTROL_HELLO &&
+             packet.type != ESPNOW_CONTROL_READY)) {
+            return;
+        }
+
+        if (activity_callback != NULL) {
+            activity_callback();
+        }
+        if (control_callback != NULL) {
+            control_callback((espnow_control_type_t)packet.type, info->src_addr, rssi_dbm);
+        }
     }
 }
 
@@ -207,11 +229,25 @@ void espnow_comm_set_receive_callback(
     receive_callback = callback;
 }
 
+void espnow_comm_set_control_callback(
+    espnow_control_callback_t callback
+)
+{
+    control_callback = callback;
+}
+
 void espnow_comm_set_activity_callback(
     espnow_activity_callback_t callback
 )
 {
     activity_callback = callback;
+}
+
+void espnow_comm_set_send_result_callback(
+    espnow_send_result_callback_t callback
+)
+{
+    send_result_callback = callback;
 }
 
 esp_err_t espnow_add_peer(
@@ -258,4 +294,25 @@ esp_err_t espnow_send_current_to(
         (const uint8_t *)packet,
         sizeof(*packet)
     );
+}
+
+
+esp_err_t espnow_send_control_to(
+    const uint8_t mac[6],
+    espnow_control_type_t type
+)
+{
+    if (mac == NULL ||
+        (type != ESPNOW_CONTROL_HELLO && type != ESPNOW_CONTROL_READY)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const espnow_control_packet_t packet = {
+        .magic = ESPNOW_CONTROL_MAGIC,
+        .version = ESPNOW_CONTROL_VERSION,
+        .type = (uint8_t)type,
+        .reserved = {0, 0},
+    };
+
+    return esp_now_send(mac, (const uint8_t *)&packet, sizeof(packet));
 }

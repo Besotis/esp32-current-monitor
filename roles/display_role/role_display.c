@@ -20,6 +20,7 @@
 static const char *TAG="ROLE_DISPLAY";
 typedef struct{current_data_packet_t packet;uint8_t mac[6];int8_t rssi;} rx_t;
 static QueueHandle_t q;
+static volatile bool sensor_hello=false;
 static bool same(const uint8_t a[6],const uint8_t b[6]){return memcmp(a,b,6)==0;}
 static int sig(int8_t r)
 {
@@ -56,6 +57,10 @@ static int sig(int8_t r)
     return 1;
 }
 static void on_packet(const current_data_packet_t *p,const uint8_t mac[6],int8_t rssi){if(!q||!p||!mac||!same(mac,DEVICE_A_MAC))return;rx_t x={.packet=*p,.rssi=rssi};memcpy(x.mac,mac,6);xQueueOverwrite(q,&x);}
+static void on_control(espnow_control_type_t type,const uint8_t mac[6],int8_t rssi){
+ if(!mac||!same(mac,DEVICE_A_MAC))return;
+ if(type==ESPNOW_CONTROL_HELLO){sensor_hello=true;ESP_LOGI(TAG,"SENSOR HELLO received, RSSI=%d dBm",rssi);}
+}
 static void arm_button_wakeup_and_sleep(void)
 {
     /* Wake button is active LOW.  Always enter sleep only after release, so
@@ -96,7 +101,7 @@ void role_display_start(void){
  ESP_ERROR_CHECK(display_st7789_release_backlight_hold_off());
  ESP_LOGI(TAG,"Device role: B - DISPLAY");
  q=xQueueCreate(1,sizeof(rx_t));if(!q){ESP_LOGE(TAG,"Queue failed");return;}
- ESP_ERROR_CHECK(espnow_comm_init());ESP_ERROR_CHECK(battery_monitor_init());ESP_ERROR_CHECK(temperature_monitor_init());ESP_ERROR_CHECK(mode_button_init());ESP_ERROR_CHECK(display_ui_init());espnow_comm_set_receive_callback(on_packet);
+ ESP_ERROR_CHECK(espnow_comm_init());ESP_ERROR_CHECK(espnow_add_peer(DEVICE_A_MAC));espnow_comm_set_control_callback(on_control);ESP_ERROR_CHECK(battery_monitor_init());ESP_ERROR_CHECK(temperature_monitor_init());ESP_ERROR_CHECK(mode_button_init());ESP_ERROR_CHECK(display_ui_init());espnow_comm_set_receive_callback(on_packet);
  display_ui_state_t ui={.view=DISPLAY_VIEW_THREE_PHASE,.online=false,.battery_percent=0,.signal_percent=0,.rssi_dbm=0,.temperature_valid=false,.temperature_c=0.0f,.l1_a=0,.l2_a=0,.l3_a=0};
  int64_t boot=esp_timer_get_time(),last_rx=0,last_bat=0,last_temp=0,last_draw=0,last_chart_sample=esp_timer_get_time();float fs=0;bool fs_init=false;
  float chart_peak_l1=0.0f,chart_peak_l2=0.0f,chart_peak_l3=0.0f,chart_peak_total=0.0f;bool chart_peak_valid=false;
@@ -114,6 +119,15 @@ void role_display_start(void){
    ESP_LOGI(TAG,"RX #%" PRIu32 " | L1=%.3f A | L2=%.3f A | L3=%.3f A | RSSI=%d dBm | SIG=%d%%",x.packet.sequence,ui.l1_a,ui.l2_a,ui.l3_a,x.rssi,ui.signal_percent);
   }
   int64_t now=esp_timer_get_time();if(last_rx==0||now-last_rx>(int64_t)DISPLAY_NO_SIGNAL_MS*1000LL)ui.online=false;
+  /* READY is a direct response to HELLO only.  Do not advertise READY
+   * periodically: a SENSOR that boots or recovers must initiate a fresh
+   * HELLO -> READY handshake before current data is accepted as connected. */
+  if(sensor_hello){
+   esp_err_t ready_err=espnow_send_control_to(DEVICE_A_MAC,ESPNOW_CONTROL_READY);
+   if(ready_err!=ESP_OK)ESP_LOGW(TAG,"READY send error: %s",esp_err_to_name(ready_err));
+   else ESP_LOGI(TAG,"READY -> SENSOR");
+   sensor_hello=false;
+  }
   const mode_button_event_t button_event = mode_button_get_event();
   if(button_event == MODE_BUTTON_EVENT_SHORT){
    switch(ui.view){

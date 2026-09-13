@@ -141,20 +141,26 @@ static esp_err_t lvgl_display_init(void)
         .hres = DISPLAY_WIDTH,
         .vres = DISPLAY_HEIGHT,
         .monochrome = false,
+        /* Hardware rotation in the ST7789 controller (MADCTL).
+         * This is the previous calibrated orientation rotated 90 deg CW,
+         * so LVGL itself remains at rotation 0 and does no software rotation. */
         .rotation = {
-            .swap_xy = true,
+            .swap_xy = false,
             .mirror_x = false,
-            .mirror_y = true,
+            .mirror_y = false,
         },
         .flags = {
             .buff_dma = true,
         },
     };
 
-    if (lvgl_port_add_disp(&display_cfg) == NULL) {
+    lv_display_t *display = lvgl_port_add_disp(&display_cfg);
+    if (display == NULL) {
         ESP_LOGE(TAG, "lvgl_port_add_disp() failed");
         return ESP_FAIL;
     }
+
+
     return ESP_OK;
 }
 

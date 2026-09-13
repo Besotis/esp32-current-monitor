@@ -1,6 +1,9 @@
 #include "role_sensor.h"
 
 #include <inttypes.h>
+#include <stdbool.h>
+#include <stdatomic.h>
+#include <string.h>
 
 #include "board_config.h"
 #include "current_sensor.h"
@@ -16,6 +19,68 @@
 #include "freertos/task.h"
 
 static const char *TAG = "ROLE_SENSOR";
+static volatile bool display_ready = false;
+static atomic_bool hello_sent;
+static atomic_uint consecutive_send_failures;
+
+static void on_control(espnow_control_type_t type,const uint8_t mac[6],int8_t rssi)
+{
+    if (mac == NULL || memcmp(mac, DEVICE_B_MAC, 6) != 0) return;
+    if (type == ESPNOW_CONTROL_READY) {
+        /* A READY is valid only after this SENSOR has sent HELLO in the
+         * current handshake cycle.  This prevents an already-running DISPLAY
+         * from making a freshly rebooted SENSOR skip HELLO. */
+        if (!atomic_load(&hello_sent)) {
+            ESP_LOGW(TAG, "Ignoring READY received before HELLO, RSSI=%d dBm", rssi);
+            return;
+        }
+
+        if (!display_ready) {
+            ESP_LOGI(TAG, "DISPLAY READY received, RSSI=%d dBm", rssi);
+        }
+        atomic_store(&consecutive_send_failures, 0);
+        display_ready = true;
+    }
+}
+
+static void on_send_result(bool success)
+{
+    /* Delivery callbacks run from the Wi-Fi task.  Only track failures while
+     * the application-level link is CONNECTED; HELLO attempts while waiting
+     * for DISPLAY are intentionally ignored here. */
+    if (!display_ready) {
+        return;
+    }
+
+    if (success) {
+        atomic_store(&consecutive_send_failures, 0);
+    } else {
+        atomic_fetch_add(&consecutive_send_failures, 1);
+    }
+}
+
+static void wait_for_display_ready(void)
+{
+    ESP_LOGI(TAG, "Waiting for DISPLAY READY...");
+
+    while (!display_ready) {
+        /* Arm READY acceptance before queueing HELLO.  ESP-NOW send is
+         * asynchronous, so the peer cannot receive and answer this HELLO
+         * before espnow_send_control_to() has queued it. */
+        atomic_store(&hello_sent, true);
+        esp_err_t hello_err = espnow_send_control_to(DEVICE_B_MAC, ESPNOW_CONTROL_HELLO);
+        if (hello_err != ESP_OK) {
+            atomic_store(&hello_sent, false);
+            ESP_LOGW(TAG, "HELLO send error: %s", esp_err_to_name(hello_err));
+        } else {
+            ESP_LOGI(TAG, "HELLO -> DISPLAY");
+        }
+        vTaskDelay(pdMS_TO_TICKS(ESPNOW_HANDSHAKE_INTERVAL_MS));
+    }
+
+    ESP_LOGI(TAG, "ESP-NOW link ready; starting current measurements");
+}
+
 
 void role_sensor_start(void)
 {
@@ -26,8 +91,14 @@ void role_sensor_start(void)
     ESP_ERROR_CHECK(sensor_status_led_init());
     ESP_ERROR_CHECK(current_sensor_init());
     ESP_ERROR_CHECK(espnow_comm_init());
+    atomic_init(&hello_sent, false);
+    atomic_init(&consecutive_send_failures, 0);
     espnow_comm_set_activity_callback(sensor_status_led_espnow_activity);
+    espnow_comm_set_control_callback(on_control);
+    espnow_comm_set_send_result_callback(on_send_result);
     ESP_ERROR_CHECK(espnow_add_peer(DEVICE_B_MAC));
+
+    wait_for_display_ready();
 
     const uint32_t session_id =
         esp_random();
@@ -35,6 +106,20 @@ void role_sensor_start(void)
     uint32_t sequence = 0;
 
     while (1) {
+        const unsigned fail_count = atomic_load(&consecutive_send_failures);
+        if (fail_count >= ESPNOW_LINK_LOSS_FAIL_COUNT) {
+            ESP_LOGW(
+                TAG,
+                "DISPLAY link lost after %u consecutive delivery failures",
+                fail_count
+            );
+
+            display_ready = false;
+            atomic_store(&hello_sent, false);
+            atomic_store(&consecutive_send_failures, 0);
+            wait_for_display_ready();
+        }
+
         current_measurement_t measurement;
 
         esp_err_t err =
@@ -101,6 +186,9 @@ void role_sensor_start(void)
                 "ESP-NOW send error: %s",
                 esp_err_to_name(err)
             );
+            if (display_ready) {
+                atomic_fetch_add(&consecutive_send_failures, 1);
+            }
         }
 
         ESP_LOGI(

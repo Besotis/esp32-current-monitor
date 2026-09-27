@@ -15,6 +15,7 @@ typedef struct {
     bool online;
     unsigned uptime_seconds;
     int battery_percent;
+    bool battery_low_blink;
     int signal_percent;
     int rssi_dbm;
     bool temperature_valid;

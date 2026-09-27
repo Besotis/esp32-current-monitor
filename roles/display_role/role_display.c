@@ -73,6 +73,16 @@ static void arm_button_wakeup_and_sleep(void)
     esp_deep_sleep_start();
 }
 
+static void enter_deep_sleep_with_message(const char *message)
+{
+    ESP_ERROR_CHECK(display_ui_show_transition(message));
+    ESP_ERROR_CHECK(display_st7789_backlight_fade_to(0, DISPLAY_SLEEP_FADE_MS));
+    ESP_ERROR_CHECK(display_st7789_prepare_sleep());
+    ESP_ERROR_CHECK(display_st7789_backlight_sleep_hold());
+    ESP_LOGI(TAG, "Release button to arm wake-up...");
+    arm_button_wakeup_and_sleep();
+}
+
 static void validate_deep_sleep_wakeup(void)
 {
     if (!(esp_sleep_get_wakeup_causes() & (1UL << ESP_SLEEP_WAKEUP_EXT1))) return;
@@ -99,10 +109,12 @@ void role_display_start(void){
  /* Only after a valid 3 s wake may BLK leave its retained LOW state.
   * A short wake press returns to deep sleep before reaching this line. */
  ESP_ERROR_CHECK(display_st7789_release_backlight_hold_off());
+ const bool waking_from_deep_sleep =
+     (esp_sleep_get_wakeup_causes() & (1UL << ESP_SLEEP_WAKEUP_EXT1)) != 0;
  ESP_LOGI(TAG,"Device role: B - DISPLAY");
  q=xQueueCreate(1,sizeof(rx_t));if(!q){ESP_LOGE(TAG,"Queue failed");return;}
  ESP_ERROR_CHECK(espnow_comm_init());ESP_ERROR_CHECK(espnow_add_peer(DEVICE_A_MAC));espnow_comm_set_control_callback(on_control);ESP_ERROR_CHECK(battery_monitor_init());ESP_ERROR_CHECK(temperature_monitor_init());ESP_ERROR_CHECK(mode_button_init());ESP_ERROR_CHECK(display_ui_init());espnow_comm_set_receive_callback(on_packet);
- display_ui_state_t ui={.view=DISPLAY_VIEW_THREE_PHASE,.online=false,.battery_percent=0,.signal_percent=0,.rssi_dbm=0,.temperature_valid=false,.temperature_c=0.0f,.l1_a=0,.l2_a=0,.l3_a=0};
+ display_ui_state_t ui={.view=DISPLAY_VIEW_THREE_PHASE,.online=false,.battery_percent=0,.battery_low_blink=false,.signal_percent=0,.rssi_dbm=0,.temperature_valid=false,.temperature_c=0.0f,.l1_a=0,.l2_a=0,.l3_a=0};
  int64_t boot=esp_timer_get_time(),last_rx=0,last_bat=0,last_temp=0,last_draw=0,last_chart_sample=esp_timer_get_time();float fs=0;bool fs_init=false;
  float chart_peak_l1=0.0f,chart_peak_l2=0.0f,chart_peak_l3=0.0f,chart_peak_total=0.0f;bool chart_peak_valid=false;
  while(1){
@@ -162,21 +174,31 @@ void role_display_start(void){
   }else if(button_event == MODE_BUTTON_EVENT_LONG){
    ESP_LOGI(TAG,"Long press 3.0 s: preparing deep sleep");
 
-   /* Show a clean transition while the panel is still fully alive, then fade
-    * only the backlight.  After the fade the existing panel sleep sequence
-    * takes over and finally holds BLK physically LOW for deep sleep. */
-   ESP_ERROR_CHECK(display_ui_show_transition("Lights Out... zZz"));
-   ESP_ERROR_CHECK(display_st7789_backlight_fade_to(0, DISPLAY_SLEEP_FADE_MS));
-
-   /* The LONG event is generated while the button is still held LOW.  Wait
-    * for release before arming an active-LOW wake source; otherwise the same
-    * press could wake the ESP32 immediately after entering deep sleep. */
-   ESP_ERROR_CHECK(display_st7789_prepare_sleep());
-   ESP_ERROR_CHECK(display_st7789_backlight_sleep_hold());
-   ESP_LOGI(TAG,"Release button to arm wake-up...");
-   arm_button_wakeup_and_sleep();
+   /* The LONG event is generated while the button is still held LOW.
+    * enter_deep_sleep_with_message() keeps the existing release-before-arm
+    * protection through arm_button_wakeup_and_sleep(). */
+   enter_deep_sleep_with_message("Lights Out... zZz");
   }
-  if(last_bat==0||now-last_bat>=1000000LL){float v;int p;if(battery_monitor_read(&v,&p)==ESP_OK){ui.battery_percent=p;}last_bat=now;}
+  if(last_bat==0||now-last_bat>=1000000LL){
+   float v;int p;
+   if(battery_monitor_read(&v,&p)==ESP_OK){
+    ui.battery_percent=p;
+    ui.battery_low_blink=(v < BATTERY_BLINK_THRESHOLD_V);
+
+    /* Critical battery protection.  On a normal running device, sleep as
+     * soon as a valid reading falls below 3.00 V.  After an EXT1 deep-sleep
+     * wake, allow 10 s of visible operation first; if the battery is still
+     * below 3.00 V, show Battery Low and return to deep sleep. */
+    const bool critical=(v < BATTERY_CRITICAL_THRESHOLD_V);
+    const bool wake_grace_done=!waking_from_deep_sleep ||
+        (now-boot >= (int64_t)BATTERY_LOW_WAKE_GRACE_MS*1000LL);
+    if(critical && wake_grace_done){
+     ESP_LOGW(TAG,"Battery critical: %.3f V - entering deep sleep",v);
+     enter_deep_sleep_with_message("Battery Low");
+    }
+   }
+   last_bat=now;
+  }
   if(last_temp==0||now-last_temp>=3000000LL){float t;if(temperature_monitor_read(&t)==ESP_OK){ui.temperature_c=t;ui.temperature_valid=true;}else{ui.temperature_valid=false;}last_temp=now;}
 
   /* 180 points x 20 s = one hour of history.

@@ -752,7 +752,7 @@ static void update_signal(const display_ui_state_t *state)
 }
 
 
-static void update_battery(int percent)
+static void update_battery(int percent, bool low_blink)
 {
     if (percent < 0) {
         percent = 0;
@@ -773,6 +773,14 @@ static void update_battery(int percent)
         battery_color_from_percent(percent),
         LV_PART_INDICATOR | LV_STATE_DEFAULT
     );
+
+    /* Below 3.20 V the empty battery outline itself blinks red.  At 0% the
+     * bar has no visible width, so blinking BODY + TIP keeps the warning
+     * clearly visible.  1 Hz cycle: 500 ms red, 500 ms normal grey. */
+    const bool red_phase = low_blink && (((lv_tick_get() / BATTERY_BLINK_PERIOD_MS) & 1U) == 0U);
+    const lv_color_t outline = lv_color_hex(red_phase ? 0xC50100 : 0xA9A9A9);
+    lv_obj_set_style_border_color(ui_BatteryBODY, outline, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(ui_BatteryTIP, outline, LV_PART_MAIN | LV_STATE_DEFAULT);
 }
 
 
@@ -998,7 +1006,7 @@ static void render_locked(
     );
 
     update_signal(state);
-    update_battery(state->battery_percent);
+    update_battery(state->battery_percent, state->battery_low_blink);
     update_temperature(state);
     update_view(state->view);
     update_measurements(state);
@@ -1031,6 +1039,7 @@ esp_err_t display_ui_init(void)
         .online = false,
         .uptime_seconds = 0,
         .battery_percent = 0,
+        .battery_low_blink = false,
         .signal_percent = 0,
         .rssi_dbm = 0,
         .temperature_valid = false,

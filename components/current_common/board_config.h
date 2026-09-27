@@ -74,6 +74,12 @@
 #define DISPLAY_WAKE_FADE_MS           2000
 #define DISPLAY_NO_SIGNAL_MS           3000
 
+/* Battery warning / protection thresholds. */
+#define BATTERY_BLINK_THRESHOLD_V      3.20f
+#define BATTERY_CRITICAL_THRESHOLD_V   3.00f
+#define BATTERY_BLINK_PERIOD_MS         500
+#define BATTERY_LOW_WAKE_GRACE_MS     10000
+
 #define BATTERY_DIVIDER_RATIO          1.999f
 #define BATTERY_ADC_CHANNEL            ADC_CHANNEL_1
 
